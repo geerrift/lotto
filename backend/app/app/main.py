@@ -7,16 +7,29 @@
 # Emails
 # question ordering
 
-from flask import Flask, jsonify, request, send_file
+from flask import Flask, jsonify, request, send_file, g
 from flask_sqlalchemy import SQLAlchemy
 from datetime import datetime
 from sqlalchemy.orm.exc import NoResultFound
 from sqlalchemy.exc import IntegrityError
+from flask_oidc import OpenIDConnect
 import os
 
 app = Flask(__name__)
-app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv("LOTTO_DB") or 'sqlite:///test.db'
+app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv("LOTTO_DB") #or 'sqlite:///test.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+app.config['OIDC_RESOURCE_SERVER_ONLY'] = True
+
+app.config.update({
+    'OIDC_CLIENT_SECRETS': '/tmp/client_secrets.json',
+    'OIDC_ID_TOKEN_COOKIE_SECURE': False,
+    'OIDC_REQUIRE_VERIFIED_EMAIL': False,
+    'OIDC_USER_INFO_ENABLED': True,
+    'OIDC_OPENID_REALM': 'memberships-backend',
+    'OIDC_SCOPES': ['openid', 'email'],
+    'OIDC_INTROSPECTION_AUTH_METHOD': 'client_secret_post'
+})
+oidc = OpenIDConnect(app)
 
 db = SQLAlchemy(app)
 db.engine.pool._pre_ping = True # SQLALCHEMY_POOL_RECYCLE
@@ -85,6 +98,7 @@ class Answer(db.Model):
     text = db.Column(db.String(5000), unique=False, nullable=True)
     borderling_id = db.Column(db.Integer, db.ForeignKey("borderling.id"))
     question = db.relationship('Question', backref='Answer', lazy = True)
+    selections = db.Column(db.String(5000), unique=False, nullable=True)
 
     def __repr__(self):
         return '<Answer: %r>' % self.text
@@ -100,6 +114,15 @@ class Question(db.Model):
     def __repr__(self):
         return '<Question: %r>' % self.text
 
+    def get_selections(self, borderling):
+        a = Answer.query.filter(Answer.borderling_id == borderling.id,
+                                Answer.id == self.answer_id).first()
+        if a and a.selections:
+            return list(map(int, a.selections.split(",")))
+        else:
+            return []
+
+
     def get_answer(self, borderling):
         a = Answer.query.filter(Answer.borderling_id == borderling.id,
                                 Answer.id == self.answer_id).first()
@@ -109,23 +132,31 @@ class Question(db.Model):
             return ""
 
     def answer(self, u, v): # TODO log replaced text
-        print(self.id)
-        prev_a = db.session.query(Answer).filter(Answer.id == self.answer_id, Answer.borderling_id == u.id).first()
-        if prev_a:
-            print("replaced previous text {:s} with {:s}".format(prev_a.text, v))
-            print(prev_a.id)
-            prev_a.text = v
+        if type(v) != list:
+            prev_a = db.session.query(Answer).filter(Answer.id == self.answer_id, Answer.borderling_id == u.id).first()
+            if prev_a:
+                print("replaced previous text {:s} with {:s}".format(prev_a.text, v))
+                prev_a.text = v
+            else:
+                db.session.add(Answer(question = [self], borderling_id = u.id, text = v))
         else:
-            db.session.add(Answer(question = [self], borderling_id = u.id, text = v))
+            v = ",".join(v)
+            prev_a = db.session.query(Answer).filter(Answer.id == self.answer_id, Answer.borderling_id == u.id).first()
+            if prev_a:
+                print("replaced previous selection {:s} with {:s}".format(prev_a.selections, v))
+                prev_a.selections = v
+            else:
+                db.session.add(Answer(question = [self], borderling_id = u.id, selections = v))
         db.session.commit()
 
     def to_dict(self, borderling=None):
         return { "id": self.id,
                  "question": self.text,
-                 "options": [ o.text for o in self.options ],
+                 "options": [ o.to_dict() for o in self.options ],
                  "answer": (borderling and
                    self.get_answer(borderling))
-                 or "" }
+                 or "",
+                 "selections": (borderling and self.get_selections(borderling)) or []}
 
 class QuestionOption(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -133,6 +164,9 @@ class QuestionOption(db.Model):
     priority = db.Column(db.Integer)
     text = db.Column(db.String(1000), unique=False)
 
+    def to_dict(self):
+        return { "id": self.id,
+                 "text" : self.text }
 
 class Questionset(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -148,7 +182,8 @@ class Questionset(db.Model):
     def to_dict(self, borderling=None):
         return { "id": self.id, "name": self.name,
                  "description": self.description,
-                 "questions": [ x.to_dict(borderling) for x in self.questions ] }
+                 "priority": self.priority,
+                 "questions": [ q.to_dict(borderling) for q in self.questions ] }
 
 class Voucher(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -179,8 +214,9 @@ def get_or_create(model,
             return db.session.query(model).filter_by(**kwargs).one()
 
 @app.route('/api/registration', methods=['GET', 'POST'])
+@oidc.accept_token(require_token=True)
 def registration():
-    u = get_or_create(Borderling, email="a")
+    u = get_or_create(Borderling, email=g.oidc_token_info['email'])
     lottery = get_lottery()
     if request.method == 'POST':
         # TODO check questions?
@@ -190,17 +226,17 @@ def registration():
     return jsonify(u.to_dict(lottery))
 
 @app.route('/api/lottery')
+@oidc.accept_token(require_token=True)
 def lottery():
     return jsonify(get_lottery().to_dict())
 
 @app.route('/api/questions/<int:qs>',
            methods=['GET', 'POST'])
+@oidc.accept_token(require_token=True)
 def questionset(qs):
-    u = get_or_create(Borderling, email="a")
+    u = get_or_create(Borderling, email=g.oidc_token_info['email'])
     if request.method == 'POST':
-        # TODO validate?
-        print(request.form)
-        for k,v in request.form.items():
+        for k,v in request.get_json().items():
             q = Question.query.filter_by(id=int(k)).first()
             q.answer(u, v)
     return jsonify(Questionset.query.filter_by(id=qs).first().to_dict(u))
@@ -251,9 +287,10 @@ Would you like to be contacted by someone about signing up for one of these civi
                             text = '''If you'd like to be part of one of the civic responsibility teams, please let us know by ticking off your preferred area(s) in the options below. Note that this is not binding, and that you only agree to be contacted with the option to participate.
 
 You do not need prior experience, and if this is your first Borderland, you are highly encouraged to participate!
-                            ''',
+                           ''',
                             options = [
-                                QuestionOption(text = "Clown Police")
+                                QuestionOption(text = "Clown Police"),
+                                QuestionOption(text = "Clown Fire Brigade")
                             ]))
 
     db.session.commit()
@@ -266,9 +303,9 @@ def get_lottery():
                                 lottery_end = datetime(2019,2,1,12,0),
                                 transfer_start = datetime(2019,1,1,12,0),
                                 transfer_end = datetime(2019,2,1,12,0))
-#db.drop_all()
+db.drop_all()
 db.create_all()
-#db_test_data()
+db_test_data()
 
 if __name__ == '__main__':
     app.run(debug = True)

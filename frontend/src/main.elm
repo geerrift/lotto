@@ -9,33 +9,49 @@ import Json.Decode as JD exposing (Decoder, field, string)
 import Json.Decode.Extra
 import Json.Encode
 import Http
-import Dict exposing (Dict)
 import List exposing (..)
 import Time
+import Dict exposing (..)
+import Debug
+import Set exposing (..)
 
 {- TODO
-   - Preload questions
-   - OpenID Connect
+   - date picker https://www.npmjs.com/package/nodep-date-input-polyfill
+   - mutliple choice
+
+   - overlay loading and error
+
+   - deal with 401
+   - test deauth
    - Vouchers, status, expiration
    - transfers
-   - gifts
-   - input validation
-   - Question options: remember selection
-   - date picker
 -}
 
+-- 
+
+type QuestionType
+    = Text
+    | Date
+    | MultipleChoice
+
+type alias Option
+    = { id : Int
+      , text : String }
 
 type alias Question
     = { id : Int
-      , question : String
+      , text : String
       , answer : String
-      , options: List String }
+      , selections : Set Int
+      --, type_ : QuestionType
+      , options: List Option }
 
-type alias Questions
+type alias QuestionSet
     = { description : String
       , id : Int
-      , name : String
-      , questions : List Question }
+      , priority : Int
+      , questions : List Question
+      , name : String }
 
 type alias Lottery
     = { can_register : Bool
@@ -54,9 +70,11 @@ type alias Model
     = { key : Nav.Key
       , url : Url.Url
       , route : Maybe Route
-      , questionSets: Dict Int Questions
+      , questionSets: List QuestionSet
+      , questions : Dict Int Question
       , lottery: Lottery
-      , registration: Registration }
+      , registration: Registration
+      , token: String }
 
 type alias HttpResource t = Result Http.Error t
 
@@ -71,11 +89,15 @@ type Msg
   | GetQuestions Int
   | GetLottery
   | GetRegistration
-  | GotQuestions (HttpResource Questions)
+  | GotQuestionSet (HttpResource QuestionSet)
   | GotLottery (HttpResource Lottery)
   | GotRegistration (HttpResource Registration)
-  | UpdateAnswer Int Question String
-  | PostAnswers Questions Bool
+  | UpdateAnswer Int String
+  | PostAnswers QuestionSet Bool
+  | Posted (HttpResource ())
+  | ToggleCheckbox Question Option Bool
+
+--
 
 main =
     Browser.application
@@ -86,16 +108,18 @@ main =
        , onUrlChange = UrlChanged
        , onUrlRequest = LinkClicked }
 
-init : () -> Url.Url -> Nav.Key -> ( Model, Cmd Msg )
+init : String -> Url.Url -> Nav.Key -> ( Model, Cmd Msg )
 init flags url key
     = ( Model
             key
             url
-            (UP.parse routeParser url) -- fixme
+            (UP.parse routeParser url) -- FIXME
+            []
             Dict.empty
             (Lottery False False [])
             (Registration False [])
-      , Cmd.batch [ getLottery , getRegistration ] )
+            flags
+      , Cmd.batch [ getLottery flags , getRegistration flags ] )
 
 routeParser : UP.Parser (Route -> a) a
 routeParser =
@@ -122,22 +146,30 @@ update msg model =
       , Cmd.none )
 
     GetQuestions i ->
-        ( model, getQuestions i ) -- TODO loading
+        ( model, getQuestions model.token i ) -- TODO loading
 
     GetLottery ->
-        ( model, getLottery )
+        ( model, getLottery model.token )
 
     GetRegistration ->
-        ( model, getRegistration )
+        ( model, getRegistration model.token )
 
-    GotQuestions result ->
+    GotQuestionSet result ->
         case result of
-            Ok qs -> ( { model | questionSets = Dict.insert qs.id qs model.questionSets }, Cmd.none )
-            Err _ -> ( model, Cmd.none ) -- TODO error
+            Ok qs ->
+                  ( { model -- TODO maybe not keep adding forever, make immutable
+                      | questionSets = (List.sortBy .priority (qs :: model.questionSets))
+                      , questions = Dict.union model.questions <| Dict.fromList <| List.map (\q -> Tuple.pair q.id q) qs.questions
+                  }
+                , Cmd.none )
+            Err e -> ( Debug.log (Debug.toString e) model, Cmd.none ) -- TODO error
 
     GotLottery result ->
         case result of
-            Ok l -> ( { model | lottery = l }, Cmd.none )
+            Ok l -> ( { model | lottery = l }
+                    , Cmd.batch (List.map
+                                     (\q -> getQuestions model.token q)
+                                     l.questions))
             Err _ -> ( model, Cmd.none )
 
     GotRegistration result ->
@@ -148,29 +180,35 @@ update msg model =
     PostAnswers qs last ->
         ( model
         , Cmd.batch
-            ([ postAnswers qs ] ++
+            ([ postAnswers model qs ] ++
                  if last then
-                     [ postRegistration ]
+                     [ postRegistration model.token ]
                  else
-                     [ getQuestions (qs.id+1) ]))
+                     [])) --[ getQuestions model.token (qs.id+1) ]))
 
-    UpdateAnswer set q v -> -- welp FIXME fix model
+    UpdateAnswer id ans ->
+        ( { model | questions = Dict.update id
+                (\q ->
+                     case q of
+                         Just q_ -> Just { q_ | answer = ans }
+                         Nothing -> Nothing)
+                model.questions }
+        , Cmd.none )
+    ToggleCheckbox question option v ->
         let
-            qs = Maybe.withDefault
-                 { description = ""
-                 , id = -1
-                 , name = ""
-                 , questions = []}
-                 (Dict.get set model.questionSets)
-            updateAnswer oldQ = if (q.id == oldQ.id) then { q | answer = v } else oldQ
-            newQuestions = List.map updateAnswer qs.questions
-            newQs = Dict.update set (\_ ->
-                                         Just { qs | questions = newQuestions })
-                    model.questionSets
+            newQuestion = { question | selections = 
+                                -- if Set.member option.id question.selections then
+                                if v then
+                                    Set.insert option.id question.selections
+                                else
+                                    Set.remove option.id question.selections
+                          }
         in
-            ( { model | questionSets = newQs } , Cmd.none )
+        ( { model | questions =
+                Dict.insert question.id newQuestion model.questions }
+        , Cmd.none )
+    _ -> ( model, Cmd.none )
 
-subscriptions : Model -> Sub Msg
 subscriptions _ =
   Sub.none
 
@@ -190,20 +228,22 @@ view model =
                                    mkTitle "Registering"
                              , body =
                                    [ div [] [ text "You're about to enter the wonderful world of registrering."]
-                                   , a [ onClick (GetQuestions 1), href "/questions/1" ] [ text "Aks me questions?" ] ] }
+                                   , a [ href "/questions/1" ] [ text "Aks me questions?" ] ] }
 
         Just (QuestionPage int) ->
             { title =
                   mkTitle "Questions?" -- TODO
             , body =
-                [ viewQuestionSet model int ] }
+                [ viewQuestionPage model int ] }
 
-        Nothing -> { title = mkTitle "You're lost", body = [ text "You're in a maze of websites, all alike." ] }
+        Nothing -> { title = mkTitle "You're lost"
+                   , body = [ text "You're in a maze of websites, all alike." ] }
 
 viewHome : Model -> List (Html Msg)
 viewHome model =
     [ div [] [ h1 [] [ text "Borderland Registraton"]] ]  ++
     [ viewRegistrationStatus model ]
+
 
 viewRegistrationStatus : Model -> Html Msg
 viewRegistrationStatus model =
@@ -217,95 +257,162 @@ viewRegistrationStatus model =
             , a [ href "/register" ] [ text "Register"]
             ]
 
-viewQuestionSet : Model -> Int -> Html Msg
-viewQuestionSet model i =
-    case Dict.get i model.questionSets of
-        Just qs ->
-            let
-                rem = List.filter (\e -> e > qs.id ) model.lottery.questions
-            in
-                viewQuestions qs (if List.isEmpty rem then
-                                      [ href "/", onClick (PostAnswers qs True) ]
-                                  else
-                                      [ href ("/questions/" ++ String.fromInt(qs.id + 1))
-                                           , onClick (PostAnswers qs False) ] )
-        Nothing ->
-            text ""  -- TODO
+viewQuestionPage : Model -> Int -> Html Msg
+viewQuestionPage model i =
+    case List.drop (i-1) model.questionSets of
+        (qset::[]) ->
+            div []
+                [ viewQuestionSet qset model.questions
+                , a [ href "/"
+                    , onClick (PostAnswers qset True) ]
+                    [ text "Done!" ]
+                ]
 
-viewQuestions : Questions -> List (Attribute Msg) -> Html Msg
-viewQuestions qs next = div []
-                        ([ h1 [] [ text qs.name ]
-                        , text qs.description
-                        ] ++ List.map (viewQuestion qs.id) qs.questions
-                        ++ [ a next [ text "Next" ] ])
+        (qset::_) ->
+            div []
+                [ viewQuestionSet qset model.questions
+                , a [ href ("/questions/" ++ String.fromInt(i + 1))
+                    , onClick (PostAnswers qset False) ]
+                    [ text "Next" ]]
+        [] ->
+           (text "No questions like that here")
 
-viewQuestion : Int -> Question -> Html Msg
-viewQuestion set q =
+viewQuestionSet : QuestionSet -> Dict Int Question -> Html Msg
+viewQuestionSet qset qs = viewQuestions <| questionsForSet qset qs
+-- TODO more info
+
+viewQuestions : List Question -> Html Msg
+viewQuestions qs = div []
+                        (List.map (viewQuestion) qs)
+
+questionsForSet : QuestionSet -> Dict Int Question -> List Question
+questionsForSet qset qs = Dict.filter (\key _ -> List.any (\q -> key == q.id ) qset.questions) qs |> Dict.values
+
+viewQuestion : Question -> Html Msg
+viewQuestion q =
     let
         qId = "question-" ++ (String.fromInt q.id)
     in
         div [ class "q" ]
                  ( if List.isEmpty q.options then
                        [
-                        label [ for qId ] [ text q.question ]
-                       , input [ type_ "text", id qId, value q.answer, onInput (UpdateAnswer set q) ] []
+                        label [ for qId ] [ text q.text ]
+                       , input [ type_ "text"
+                               , id qId
+                               , value q.answer
+                               , onInput (UpdateAnswer q.id) ] []
                        ]
                  else
                      [
-                      label [ for qId ] [ text q.question ]
-                     ] ++ (List.map viewOption q.options))
+                      label [ for qId ] [ text q.text ]
+                     ] ++ (List.map (viewOption q) q.options))
 
-viewOption : String -> Html Msg
-viewOption desc =
-    div [] -- TODO
-        [ input [ type_ "checkbox", id desc ] []
-        , label [ for desc ] [ text desc ]
-        ]
+viewOption : Question -> Option -> Html Msg
+viewOption q o =
+    let
+        id_ = ("option-" ++ String.fromInt o.id)
+    in
+        div []
+            [ input [ type_ "checkbox"
+                    , id id_
+                    , onCheck (ToggleCheckbox q o)
+                    , checked (Set.member o.id q.selections) ] []
+            , label [ for id_ ] [ text o.text ]
+            ]
 
 -- HTTP resources
 
-getQuestions : Int -> Cmd Msg
-getQuestions i = Http.get
-               { url = "/api/questions/" ++ String.fromInt(i)
-               , expect = Http.expectJson GotQuestions questionsDecoder }
+getQuestions : Token -> Int -> Cmd Msg
+getQuestions token i =
+    authorizedGet token ("/api/questions/" ++ String.fromInt(i))
+        (Http.expectJson GotQuestionSet questionSetDecoder)
 
-postAnswers : Questions -> Cmd Msg
-postAnswers qs = Http.post
-                { url = "/api/questions/" ++ String.fromInt(qs.id)
-                , body = Http.multipartBody
-                         (List.map (\q -> Http.stringPart (String.fromInt q.id) q.answer)
-                              qs.questions)
-                , expect = Http.expectJson GotQuestions questionsDecoder }
+postAnswers : Model -> QuestionSet -> Cmd Msg
+postAnswers model qs =
+    authorizedPost
+                (Http.jsonBody <| Json.Encode.object
+                     (List.map
+                          (\q -> ((String.fromInt q.id),
+                               (if Set.isEmpty q.selections then
+                                    Json.Encode.string q.answer
+                                else
+                                    Json.Encode.list Json.Encode.string
+                                    <| Set.toList
+                                    <| Set.map String.fromInt q.selections)))
+                          (questionsForSet qs model.questions)) )
+                model.token
+                ("/api/questions/" ++ String.fromInt(qs.id))
+                --(Http.expectJson GotQuestionSet questionSetDecoder)
+                (Http.expectWhatever Posted)
 
-getRegistration : Cmd Msg
-getRegistration = Http.get
-               { url = "/api/registration"
-               , expect = Http.expectJson GotRegistration registrationDecoder }
+getRegistration : Token -> Cmd Msg
+getRegistration token =
+    authorizedGet
+        token
+        "/api/registration"
+        (Http.expectJson GotRegistration registrationDecoder)
 
-postRegistration : Cmd Msg
-postRegistration = Http.post
-               { url = "/api/registration"
-               , body = Http.emptyBody
-               , expect = Http.expectJson GotRegistration registrationDecoder }
+postRegistration : Token -> Cmd Msg
+postRegistration token =
+    authorizedPost Http.emptyBody token "/api/registration"
+            (Http.expectJson GotRegistration registrationDecoder)
 
-getLottery : Cmd Msg
-getLottery = Http.get
-               { url = "/api/lottery"
-               , expect = Http.expectJson GotLottery lotteryDecoder }
+getLottery : String -> Cmd Msg
+getLottery token =
+    authorizedGet token "/api/lottery" (Http.expectJson GotLottery lotteryDecoder)
+
+type alias Token = String
+authorizedReq : String -> Http.Body -> Token -> String -> Http.Expect Msg -> Cmd Msg
+authorizedReq method body token url expect =
+    Http.request
+        { url = url
+        , method = method
+        , headers = [ Http.header "Authorization" ("Bearer " ++ token) ]
+        , body = body
+        , timeout = Nothing
+        , tracker = Nothing
+        , expect = expect }
+
+authorizedGet : Token -> String -> Http.Expect Msg -> Cmd Msg
+authorizedGet = authorizedReq "GET" Http.emptyBody
+
+
+authorizedPost : Http.Body -> Token -> String -> Http.Expect Msg -> Cmd Msg
+authorizedPost = authorizedReq "POST"
 
 -- JSON Decoders
 
-questionsDecoder : JD.Decoder Questions
-questionsDecoder = JD.map4 Questions
+questionSetDecoder : JD.Decoder QuestionSet
+questionSetDecoder = JD.map5 QuestionSet
                       (JD.at ["description"] JD.string)
                       (JD.at ["id"] JD.int)
-                      (JD.at ["name"] JD.string)
+                      (JD.at ["priority"] JD.int)
                       (JD.at ["questions"] (JD.list
-                           (JD.map4 Question
+                           (JD.map5 Question
                                 (JD.at ["id"] JD.int)
                                 (JD.at ["question"] JD.string)
                                 (JD.at ["answer"] JD.string)
-                                (JD.at ["options"] (JD.list JD.string)))))
+                                ((JD.at ["selections"] (JD.list JD.int)) |> JD.andThen (\l -> JD.succeed (Set.fromList l)))
+                                --(JD.at ["type"] questionTypeDecoder)
+                                (JD.at ["options"] (JD.list optionDecoder)))))
+                      (JD.at ["name"] JD.string)
+
+optionDecoder : JD.Decoder Option
+optionDecoder = JD.map2 Option
+                (JD.at ["id"] JD.int)
+                (JD.at ["text"] JD.string)
+
+questionTypeDecoder : JD.Decoder QuestionType
+questionTypeDecoder = JD.string |> JD.andThen
+                      (\str -> case str of
+                        "text" ->
+                           JD.succeed Text
+                        "date" ->
+                           JD.succeed Date
+                        "multiple" ->
+                           JD.succeed MultipleChoice
+                        e ->
+                          JD.fail <| "Unknown option type " ++ e)
 
 lotteryDecoder : JD.Decoder Lottery
 lotteryDecoder = JD.map3 Lottery

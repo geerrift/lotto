@@ -3,10 +3,19 @@
     <head>
         <meta charset="UTF-8">
         <title>Borderland Membership Lottery</title>
-        <link rel="stylesheet" href="whatever-you-want.css">
+        <link rel="stylesheet" href="/static/memberships.css">
+        <script src="https://account.theborderland.se/auth/js/keycloak.min.js"></script>
         <script src="/static/main.js"></script>
     </head>
     <body>
-        <script>var app = Elm.Main.init();</script>
+        <script>
+         const keycloak = Keycloak('/static/keycloak.json');
+         keycloak.onAuthSuccess = function () {
+             Elm.Main.init({
+                 flags: keycloak.token
+             });
+         };
+         keycloak.init({ onLoad: 'login-required' });
+        </script>
     </body>
 </html>
