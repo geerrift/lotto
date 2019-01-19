@@ -16,15 +16,17 @@ import Debug
 import Set exposing (..)
 
 {- TODO
-   - date picker https://www.npmjs.com/package/nodep-date-input-polyfill
-   - mutliple choice
-
-   - overlay loading and error
-
-   - deal with 401
-   - test deauth
    - Vouchers, status, expiration
    - transfers
+
+   - overlay loading and error
+   - deal with 401
+   - test deauth
+
+   - date polyfill https://www.npmjs.com/package/nodep-date-input-polyfill
+
+   - modules
+   - document
 -}
 
 -- 
@@ -43,7 +45,7 @@ type alias Question
       , text : String
       , answer : String
       , selections : Set Int
-      --, type_ : QuestionType
+      , type_ : QuestionType
       , options: List Option }
 
 type alias QuestionSet
@@ -297,7 +299,7 @@ viewQuestion q =
                  ( if List.isEmpty q.options then
                        [
                         label [ for qId ] [ text q.text ]
-                       , input [ type_ "text"
+                       , input [ type_ <| if q.type_ == Date then "date" else "text"
                                , id qId
                                , value q.answer
                                , onInput (UpdateAnswer q.id) ] []
@@ -388,12 +390,13 @@ questionSetDecoder = JD.map5 QuestionSet
                       (JD.at ["id"] JD.int)
                       (JD.at ["priority"] JD.int)
                       (JD.at ["questions"] (JD.list
-                           (JD.map5 Question
+                           (JD.map6 Question
                                 (JD.at ["id"] JD.int)
                                 (JD.at ["question"] JD.string)
                                 (JD.at ["answer"] JD.string)
-                                ((JD.at ["selections"] (JD.list JD.int)) |> JD.andThen (\l -> JD.succeed (Set.fromList l)))
-                                --(JD.at ["type"] questionTypeDecoder)
+                                ((JD.at ["selections"] (JD.list JD.int))
+                                |> JD.andThen (\l -> JD.succeed (Set.fromList l)))
+                                (JD.at ["type"] questionTypeDecoder)
                                 (JD.at ["options"] (JD.list optionDecoder)))))
                       (JD.at ["name"] JD.string)
 

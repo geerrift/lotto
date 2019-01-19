@@ -156,6 +156,7 @@ class Question(db.Model):
                  "answer": (borderling and
                    self.get_answer(borderling))
                  or "",
+                 "type": self.type,
                  "selections": (borderling and self.get_selections(borderling)) or []}
 
 class QuestionOption(db.Model):
