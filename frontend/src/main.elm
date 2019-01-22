@@ -16,6 +16,9 @@ import Debug
 import Set exposing (..)
 
 {- TODO
+   - number
+   - datalist
+
    - Vouchers, status, expiration
    - transfers
 
@@ -35,6 +38,8 @@ type QuestionType
     = Text
     | Date
     | MultipleChoice
+    | DataList
+    | Number
 
 type alias Option
     = { id : Int
@@ -414,6 +419,10 @@ questionTypeDecoder = JD.string |> JD.andThen
                            JD.succeed Date
                         "multiple" ->
                            JD.succeed MultipleChoice
+                        "datalist" ->
+                           JD.succeed DataList
+                        "number" ->
+                           JD.succeed Number
                         e ->
                           JD.fail <| "Unknown option type " ++ e)
 

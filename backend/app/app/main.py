@@ -1,11 +1,13 @@
 # TODO
+# create db if empty - for test
 # children
-# OpenID
 # Transfers
 # Pretix integration
 # Logging
 # Emails
-# question ordering
+# question ordering?
+# refactor - model, etc
+# pre-login front page
 
 from flask import Flask, jsonify, request, send_file, g
 from flask_sqlalchemy import SQLAlchemy
@@ -14,13 +16,22 @@ from sqlalchemy.orm.exc import NoResultFound
 from sqlalchemy.exc import IntegrityError
 from flask_oidc import OpenIDConnect
 import os
+import json
 
 app = Flask(__name__)
-app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv("LOTTO_DB") #or 'sqlite:///test.db'
-app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-app.config['OIDC_RESOURCE_SERVER_ONLY'] = True
+oidc = OpenIDConnect(app)
+db = SQLAlchemy(app)
+db.engine.pool._pre_ping = True # SQLALCHEMY_POOL_RECYCLE
+
+with open("/tmp/client_secrets.json") as f:
+    json.dump({
+        
+    }, f)
 
 app.config.update({
+    'SQLALCHEMY_DATABASE_URI' = os.getenv("LOTTO_DB"), #or 'sqlite:///test.db'
+    'SQLALCHEMY_TRACK_MODIFICATIONS': False,
+    'OIDC_RESOURCE_SERVER_ONLY': True,
     'OIDC_CLIENT_SECRETS': '/tmp/client_secrets.json',
     'OIDC_ID_TOKEN_COOKIE_SECURE': False,
     'OIDC_REQUIRE_VERIFIED_EMAIL': False,
@@ -29,10 +40,8 @@ app.config.update({
     'OIDC_SCOPES': ['openid', 'email'],
     'OIDC_INTROSPECTION_AUTH_METHOD': 'client_secret_post'
 })
-oidc = OpenIDConnect(app)
 
-db = SQLAlchemy(app)
-db.engine.pool._pre_ping = True # SQLALCHEMY_POOL_RECYCLE
+
 
 class Lottery(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -131,7 +140,7 @@ class Question(db.Model):
         else:
             return ""
 
-    def answer(self, u, v): # TODO log replaced text
+    def answer(self, u, v):
         if type(v) != list:
             prev_a = db.session.query(Answer).filter(Answer.id == self.answer_id, Answer.borderling_id == u.id).first()
             if prev_a:
@@ -220,7 +229,6 @@ def registration():
     u = get_or_create(Borderling, email=g.oidc_token_info['email'])
     lottery = get_lottery()
     if request.method == 'POST':
-        # TODO check questions?
         if lottery.registrationAllowed():
             lottery.borderlings.append(u)
             db.session.commit()
@@ -277,12 +285,14 @@ Would you like to be contacted by someone about signing up for one of these civi
 ''')
     db.session.add(personal_qs)
     db.session.add(volunteer_qs)
+    db.session.add(demographic_qs)
     db.session.commit()
     q1 = Question(set_id = personal_qs.id, text="Your name as it appears on official documents", type = "text")
     q2 = Question(set_id = personal_qs.id, text="Your date of birth", type = "date")
     db.session.add(q1)
     db.session.add(q2)
 
+    # Here’s a page that gives an overview of what you could help out with: http://wiki.theborderland.se/Civics TODO
     db.session.add(Question(set_id = volunteer_qs.id,
                             type = "multiple",
                             text = '''If you'd like to be part of one of the civic responsibility teams, please let us know by ticking off your preferred area(s) in the options below. Note that this is not binding, and that you only agree to be contacted with the option to participate.
@@ -291,9 +301,38 @@ You do not need prior experience, and if this is your first Borderland, you are 
                            ''',
                             options = [
                                 QuestionOption(text = "Clown Police"),
-                                QuestionOption(text = "Clown Fire Brigade")
+                                QuestionOption(text = "Sanctuary (first aid and psychological well being)")
+                                QuestionOption(text = "Electrical Power")
+                                QuestionOption(text = "Drinking Water and Greywater")
+                                QuestionOption(text = "Swimming Safety")
+                                QuestionOption(text = "Communal Spaces")
+                                QuestionOption(text = "Communications")
+                            ]))
+    db.session.add(Question(set_id = volunteer_qs.id,
+                            type = "multiple",
+                            text = '''
+Please let us know if you have any special skills or relevant experience and would like to help out within one (or more) of the following areas:
+                            ''',
+                            options = [
+                                QuestionOption(text = "First aid or other medical experience"),
+                                QuestionOption(text = "Psychological Welfare")
+                                QuestionOption(text = "Conflict Resolution")
+                                QuestionOption(text = "Power or other Infrastructure")
+                                QuestionOption(text = "Safety and Risk Assessment")
+                                QuestionOption(text = "Bureaucracy related to this kind of event")
                             ]))
 
+    db.session.add(Question(set_id = demographic_qs.id,
+                            type = "datalist",
+                            text = "Where in the world are you from?",
+                            options = [ QuestionOption(text = c['Name'])
+                                        for c in json.load(open("countries.json")) ]))
+    db.session.add(Question(set_id = demographic_qs.id,
+                            type = "number",
+                            text = "How many Burn-like events have you been to before (The Borderland, Burning Man, Nowhere, Burning Møn, ...)?"))
+    db.session.add(Question(set_id = demographic_qs.id,
+                            type = "number",
+                            text = "Of those, how many times have you attended The Borderland?"))
     db.session.commit()
 
 def get_lottery():
@@ -304,7 +343,7 @@ def get_lottery():
                                 lottery_end = datetime(2019,2,1,12,0),
                                 transfer_start = datetime(2019,1,1,12,0),
                                 transfer_end = datetime(2019,2,1,12,0))
-db.drop_all()
+#db.drop_all()
 db.create_all()
 db_test_data()
 
