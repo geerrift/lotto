@@ -15,23 +15,6 @@ import Dict exposing (..)
 import Debug
 import Set exposing (..)
 
-{- TODO
-   - number
-   - datalist
-
-   - Vouchers, status, expiration
-   - transfers
-
-   - overlay loading and error
-   - deal with 401
-   - test deauth
-
-   - date polyfill https://www.npmjs.com/package/nodep-date-input-polyfill
-
-   - modules
-   - document
--}
-
 -- 
 
 type QuestionType
@@ -285,7 +268,10 @@ viewQuestionPage model i =
            (text "No questions like that here")
 
 viewQuestionSet : QuestionSet -> Dict Int Question -> Html Msg
-viewQuestionSet qset qs = viewQuestions <| questionsForSet qset qs
+viewQuestionSet qset qs = div [] [ h1 [] [ text qset.name ]
+                                 , text qset.description
+                                 , viewQuestions <| questionsForSet qset qs
+                                 ]
 -- TODO more info
 
 viewQuestions : List Question -> Html Msg
@@ -301,18 +287,39 @@ viewQuestion q =
         qId = "question-" ++ (String.fromInt q.id)
     in
         div [ class "q" ]
-                 ( if List.isEmpty q.options then
-                       [
-                        label [ for qId ] [ text q.text ]
-                       , input [ type_ <| if q.type_ == Date then "date" else "text"
+            ([ label [ for qId ] [ text q.text ] ]
+            ++ case q.type_ of
+                  Number ->
+                      [ input [ type_ "number"
                                , id qId
                                , value q.answer
-                               , onInput (UpdateAnswer q.id) ] []
-                       ]
-                 else
-                     [
-                      label [ for qId ] [ text q.text ]
-                     ] ++ (List.map (viewOption q) q.options))
+                               , Html.Attributes.min "0"
+                               , Html.Attributes.required True
+                               , onInput (UpdateAnswer q.id) ] [] ]
+                  Date ->
+                      [ input [ type_ "date"
+                               , id qId
+                               , value q.answer
+                               , Html.Attributes.required True
+                               , onInput (UpdateAnswer q.id) ] [] ]
+                  Text ->
+                      [ input [ type_ "text"
+                               , id qId
+                               , value q.answer
+                               , Html.Attributes.required True
+                               , onInput (UpdateAnswer q.id) ] [] ]
+                  DataList ->
+                      [ input [ type_ "text"
+                              , id qId
+                              , value q.answer
+                              , onInput (UpdateAnswer q.id)
+                              , Html.Attributes.required True
+                              , list <| "datalist-" ++ qId
+                              ] []
+                      , datalist [ id <| "datalist-" ++ qId ]
+                          <| List.map (\x -> option [ value x.text ] []) q.options ]
+                  MultipleChoice ->
+                      (List.map (viewOption q) q.options))
 
 viewOption : Question -> Option -> Html Msg
 viewOption q o =

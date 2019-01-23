@@ -1,35 +1,49 @@
-# TODO
-# create db if empty - for test
-# children
-# Transfers
-# Pretix integration
-# Logging
-# Emails
-# question ordering?
-# refactor - model, etc
-# pre-login front page
-
 from flask import Flask, jsonify, request, send_file, g
 from flask_sqlalchemy import SQLAlchemy
-from datetime import datetime
+from datetime import datetime, timedelta
 from sqlalchemy.orm.exc import NoResultFound
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.sql.expression import func
 from flask_oidc import OpenIDConnect
+import requests
 import os
 import json
+import logging
+from logging.config import dictConfig
+from flask.logging import default_handler
 
 app = Flask(__name__)
-oidc = OpenIDConnect(app)
-db = SQLAlchemy(app)
-db.engine.pool._pre_ping = True # SQLALCHEMY_POOL_RECYCLE
+logging.getLogger().addHandler(default_handler)
+dictConfig({
+    'version': 1,
+    'formatters': {'default': {
+        'format': '[%(asctime)s] %(levelname)s in %(module)s: %(message)s',
+    }},
+    'handlers': {'wsgi': {
+        'class': 'logging.StreamHandler',
+        'stream': 'ext://flask.logging.wsgi_errors_stream',
+        'formatter': 'default'
+    }},
+    'root': {
+        'level': 'INFO',
+        'handlers': ['wsgi']
+    }
+})
 
-with open("/tmp/client_secrets.json") as f:
+with open("/tmp/client_secrets.json", "w") as f:
     json.dump({
-        
+        'web': {'auth_uri': 'https://account.theborderland.se/auth/realms/master/protocol/openid-connect/auth',
+                'client_id': os.getenv("OID_ID") or 'memberships-backend',
+                'client_secret': os.getenv("OID_SECRET"),
+                'issuer': 'https://account.theborderland.se/auth/realms/master',
+                'redirect_uris': ['https://account.theborderland.se/*'],
+                'token_introspection_uri': 'https://account.theborderland.se/auth/realms/master/protocol/openid-connect/token/introspect',
+                'token_uri': 'https://account.theborderland.se/auth/realms/master/protocol/openid-connect/token',
+                'userinfo_uri': 'https://account.theborderland.se/auth/realms/master/protocol/openid-connect/userinfo'}
     }, f)
 
 app.config.update({
-    'SQLALCHEMY_DATABASE_URI' = os.getenv("LOTTO_DB"), #or 'sqlite:///test.db'
+    'SQLALCHEMY_DATABASE_URI': os.getenv("LOTTO_DB"), #or 'sqlite:///test.db'
     'SQLALCHEMY_TRACK_MODIFICATIONS': False,
     'OIDC_RESOURCE_SERVER_ONLY': True,
     'OIDC_CLIENT_SECRETS': '/tmp/client_secrets.json',
@@ -41,6 +55,17 @@ app.config.update({
     'OIDC_INTROSPECTION_AUTH_METHOD': 'client_secret_post'
 })
 
+# TODO config
+pretix_token = os.getenv("PRETIX_TOKEN")
+host = "pretix.theborderland.se"
+org = "borderland"
+event = "test"
+item = 1
+expiration_delta = { "days": 2 }
+
+oidc = OpenIDConnect(app)
+db = SQLAlchemy(app)
+db.engine.pool._pre_ping = True # SQLALCHEMY_POOL_RECYCLE
 
 
 class Lottery(db.Model):
@@ -73,6 +98,9 @@ class Lottery(db.Model):
     def isFCFS(self):
         return self.lottery_end < datetime.now()
 
+    def get_random_borderling(self):
+        return Borderling.query.filter(Borderling.lottery_id == self.id, Voucher... ).order_by(func.random()).first()
+
     def to_dict(self):
         return { "can_register": self.registrationAllowed(),
                  "can_transfer": self.transferAllowed(),
@@ -90,10 +118,25 @@ class Borderling(db.Model):
     def __repr__(self):
         return '<Borderling %r>' % self.email
 
-    #def isChild
-    # TODO child or FCFS
+    def lottery(self):
+        return Lottery.query.filter(Lottery.id == self.lottery_id).first()
+
+    def isChild():
+        q = Question.query.filter(Question.tag == "dob").first()
+        a = Answer.query.filter(Answer.borderling_id == self.id, question == q.id).first()
+        try:
+            dob = datetime.strptime(a.text, "%Y-%m-%d") # TODO
+        except:
+            return False
+        return dob > datetime.now()-datetime.timedelta(days = 13*365)
+
     def getVouchers(self):
-        return [ v.to_dict() for v in self.vouchers ]
+        if self.isChild():
+            return [ lottery.child_voucher ]
+        elif lottery.isFCFS():
+            return [ lottery.fcfs_voucher ]
+        else:
+            return [ v.to_dict() for v in self.vouchers ]
 
     def isRegistered(self, lottery):
         return self in get_lottery().borderlings
@@ -119,6 +162,7 @@ class Question(db.Model):
     type = db.Column(db.String(100), unique=False, nullable=True)
     answer_id = db.Column(db.Integer, db.ForeignKey("answer.id"))
     options = db.relationship('QuestionOption', backref='Question', lazy = True)
+    tag = db.Column(db.String(100), unique=False, nullable=True)
 
     def __repr__(self):
         return '<Question: %r>' % self.text
@@ -141,19 +185,19 @@ class Question(db.Model):
             return ""
 
     def answer(self, u, v):
+        prev = db.session.query(Answer).filter(Answer.id == self.answer_id, Answer.borderling_id == u.id).first()
         if type(v) != list:
-            prev_a = db.session.query(Answer).filter(Answer.id == self.answer_id, Answer.borderling_id == u.id).first()
-            if prev_a:
-                print("replaced previous text {:s} with {:s}".format(prev_a.text, v))
-                prev_a.text = v
+            if prev:
+                app.logger.info("User {} Question {}: Replacing {:s} with {:s}".format(u.id, q.id, prev.text, v))
+                prev.text = v
             else:
                 db.session.add(Answer(question = [self], borderling_id = u.id, text = v))
         else:
             v = ",".join(v)
-            prev_a = db.session.query(Answer).filter(Answer.id == self.answer_id, Answer.borderling_id == u.id).first()
-            if prev_a:
-                print("replaced previous selection {:s} with {:s}".format(prev_a.selections, v))
-                prev_a.selections = v
+            prev = db.session.query(Answer).filter(Answer.id == self.answer_id, Answer.borderling_id == u.id).first()
+            if prev:
+                app.logger.info("User {} Question {}: Replacing {:s} with {:s}".format(u.id, q.id, prev.text, v))
+                prev.selections = v
             else:
                 db.session.add(Answer(question = [self], borderling_id = u.id, selections = v))
         db.session.commit()
@@ -200,6 +244,7 @@ class Voucher(db.Model):
     code = db.Column(db.String(1000), unique=True, nullable=False)
     expires = db.Column(db.DateTime, unique=False, nullable=True)
     borderling_id = db.Column(db.Integer, db.ForeignKey("borderling.id"))
+    order = db.Column(db.String(1000), unique=True, nullable=True)
 
     def __repr__(self):
         return '<Voucher: %r>' % self.code
@@ -269,12 +314,99 @@ def route_frontend(path):
         index_path = os.path.join(app.static_folder, 'index.html')
         return send_file(index_path)
 
+# Internal stuff
+@app.route('/_/cron')
+def periodic():
+    do_lottery()
+    return "k"
+
+def do_lottery():
+    lottery = get_lottery()
+    if lottery.lotteryRunning():
+        borderling = lottery.get_random_borderling()
+        if borderling: # or something
+            get_vouchers(borderling)
+
+
+def get_vouchers():
+    valid_until = datetime.now()+timedelta(**expiration_delta)
+
+    r = requests.post("https://{}/api/v1/organizers/{}/events/{}/vouchers/batch_create/".format(host, org, event),
+                  headers = {
+                      "Authorization": "Token {}".format(pretix_token)
+                  },
+                  json = [
+                      {
+                          "code": generate_code(),
+                          "max_usages": 1,
+                          "valid_until": str(valid_until),
+                          "block_quota": "true",
+                          "item": item,
+
+                          "allow_ignore_quota": "false",
+                          "price_mode": "none",
+                          "value": "0",
+                          "variation": None,
+                          "quota": None,
+                          "tag": "lottery",
+                          "comment": "",
+                          "subevent": None
+                      },
+                      {
+                          "code": generate_code(),
+                          "max_usages": 1,
+                          "valid_until": str(valid_until),
+                          "block_quota": "true",
+                          "item": item,
+
+                          "allow_ignore_quota": "false",
+                          "price_mode": "none",
+                          "value": "0",
+                          "variation": None,
+                          "quota": None,
+                          "tag": "lottery",
+                          "comment": "",
+                          "subevent": None
+                      }
+                  ])
+
+    if r.status_code == 201:
+        for v in r.json():
+            db.session.add(Voucher(
+                borderling_id = borderling.id,
+                code = v["code"],
+                expires = valid_until
+            ))
+        # TODO borderling.email_voucher()
+        db.session.commit()
+    else:
+        print("Unable to create vouchers: {} {}".format(r.status_code, r.text))
+
+
+
+
+@app.route('/_/webhooks/pretix')
+def pretix_webhook():
+    # case action ..
+      #{"notification_id": 117, "organizer": "borderland", "event": "test", "code": "Z9M9V", "action": "pretix.event.order.paid"}
+    # pretix_get_voucher_for_code(code)
+    # voucher.order = code
+    # pretix_update_order_name
+    # update download link
+    return "k"
+
+
+
 def db_test_data():
     lottery = get_lottery()
     borderling_a = Borderling(email="a")
     db.session.add(borderling_a)
     db.session.commit()
-    personal_qs = Questionset(lottery_id = lottery.id, priority=10, name="Personal questions",description="Tell me about your mother")
+    personal_qs = Questionset(lottery_id = lottery.id, priority=10, name="Personal questions",description='''To make the lottery fair we need to check your ID when you arrive at the port. Please fill out the following like it appears on an official document.
+
+    This information is deleted after the event, but we might summarise ages for demographic purposes.
+    ''')
+
     demographic_qs = Questionset(lottery_id = lottery.id, priority=30, name="Demographic questions",
                                  description="Questions just so we know a bit about how's coming. Anonymised etc")
     volunteer_qs = Questionset(lottery_id = lottery.id, priority=20, name="Voluteer questions",
@@ -288,11 +420,10 @@ Would you like to be contacted by someone about signing up for one of these civi
     db.session.add(demographic_qs)
     db.session.commit()
     q1 = Question(set_id = personal_qs.id, text="Your name as it appears on official documents", type = "text")
-    q2 = Question(set_id = personal_qs.id, text="Your date of birth", type = "date")
+    q2 = Question(set_id = personal_qs.id, text="Your date of birth", type = "date", tag="DOB")
     db.session.add(q1)
     db.session.add(q2)
 
-    # Here’s a page that gives an overview of what you could help out with: http://wiki.theborderland.se/Civics TODO
     db.session.add(Question(set_id = volunteer_qs.id,
                             type = "multiple",
                             text = '''If you'd like to be part of one of the civic responsibility teams, please let us know by ticking off your preferred area(s) in the options below. Note that this is not binding, and that you only agree to be contacted with the option to participate.
@@ -301,11 +432,11 @@ You do not need prior experience, and if this is your first Borderland, you are 
                            ''',
                             options = [
                                 QuestionOption(text = "Clown Police"),
-                                QuestionOption(text = "Sanctuary (first aid and psychological well being)")
-                                QuestionOption(text = "Electrical Power")
-                                QuestionOption(text = "Drinking Water and Greywater")
-                                QuestionOption(text = "Swimming Safety")
-                                QuestionOption(text = "Communal Spaces")
+                                QuestionOption(text = "Sanctuary (first aid and psychological well being)"),
+                                QuestionOption(text = "Electrical Power"),
+                                QuestionOption(text = "Drinking Water and Greywater"),
+                                QuestionOption(text = "Swimming Safety"),
+                                QuestionOption(text = "Communal Spaces"),
                                 QuestionOption(text = "Communications")
                             ]))
     db.session.add(Question(set_id = volunteer_qs.id,
@@ -315,10 +446,10 @@ Please let us know if you have any special skills or relevant experience and wou
                             ''',
                             options = [
                                 QuestionOption(text = "First aid or other medical experience"),
-                                QuestionOption(text = "Psychological Welfare")
-                                QuestionOption(text = "Conflict Resolution")
-                                QuestionOption(text = "Power or other Infrastructure")
-                                QuestionOption(text = "Safety and Risk Assessment")
+                                QuestionOption(text = "Psychological Welfare"),
+                                QuestionOption(text = "Conflict Resolution"),
+                                QuestionOption(text = "Power or other Infrastructure"),
+                                QuestionOption(text = "Safety and Risk Assessment"),
                                 QuestionOption(text = "Bureaucracy related to this kind of event")
                             ]))
 
@@ -326,7 +457,7 @@ Please let us know if you have any special skills or relevant experience and wou
                             type = "datalist",
                             text = "Where in the world are you from?",
                             options = [ QuestionOption(text = c['Name'])
-                                        for c in json.load(open("countries.json")) ]))
+                                        for c in json.load(open("./countries.json")) ]))
     db.session.add(Question(set_id = demographic_qs.id,
                             type = "number",
                             text = "How many Burn-like events have you been to before (The Borderland, Burning Man, Nowhere, Burning Møn, ...)?"))
@@ -345,7 +476,10 @@ def get_lottery():
                                 transfer_end = datetime(2019,2,1,12,0))
 #db.drop_all()
 db.create_all()
-db_test_data()
+
+if not Lottery.query.first():
+    print("Creating test data")
+    db_test_data()
 
 if __name__ == '__main__':
     app.run(debug = True)
