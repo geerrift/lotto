@@ -52,8 +52,13 @@ type alias Voucher
     = { code : String
       , expires : Time.Posix }
 
+type alias Ticket
+    = { order: String
+      , download_url: Maybe String }
+
 type alias Registration
     = { registered : Bool
+      , tickets : Maybe Ticket
       , vouchers : List Voucher }
 
 type alias Model
@@ -107,7 +112,7 @@ init flags url key
             []
             Dict.empty
             (Lottery False False [])
-            (Registration False [])
+            (Registration False Nothing [])
             flags
       , Cmd.batch [ getLottery flags , getRegistration flags ] )
 
@@ -231,13 +236,61 @@ view model =
 
 viewHome : Model -> List (Html Msg)
 viewHome model =
-    [ div [] [ h1 [] [ text "Borderland Registraton"]] ]  ++
-    [ viewRegistrationStatus model ]
+    [ div [] [ h1 [] [ text "Borderland Registraton"]] ]
+    ++ [ viewRegistrationStatus model ]
+    ++ [ Maybe.withDefault (text "") <| viewVoucherStatus model]
+    ++ viewExtraVouchers model
 
+viewExtraVouchers : Model -> List (Html Msg)
+viewExtraVouchers m =
+    case m.registration.vouchers of
+        (_::[]) ->
+            []
+        (_::xs) ->
+            List.map (viewExtraVoucher m) xs
+        _ ->
+            []
+
+viewExtraVoucher : Model -> Voucher -> Html Msg
+viewExtraVoucher m v =
+    div []
+        [
+         text "blah blah input field TODO"
+        ]
+
+viewVoucherStatus : Model -> Maybe (Html Msg)
+viewVoucherStatus m =
+    case m.registration.tickets of
+        Just t ->
+            Just (text "you have a ticket yay etc transfers pdf download etc")
+        Nothing ->
+            case m.registration.vouchers of
+                [] ->
+                    Nothing
+                (x::_) ->
+                    viewPersonalVoucher m
+
+viewPersonalVoucher : Model -> Maybe (Html Msg)
+viewPersonalVoucher m =
+    head m.registration.vouchers
+        |> Maybe.andThen (\v -> Just <|
+                              div [] [ text "you have a ticket"
+                                     ,  text <| "Expiration epoch : " ++ String.fromInt ((Time.posixToMillis v.expires)) -- TODO
+                                     , viewPretixButton v.code m ])
+
+viewPretixButton : String -> Model -> Html Msg
+viewPretixButton code m =
+    node "pretix-button"
+        [ attribute "event" "https://pretix.theborderland.se/borderland/test/" -- FIXME
+        , attribute "items" "item_1=1" -- FIXME
+        , attribute "voucher" code
+        --, attribute "data-attendee-name" "" -- -given-name
+        , attribute "data-email" "test@example.org"
+        ] []
 
 viewRegistrationStatus : Model -> Html Msg
 viewRegistrationStatus model =
-    if model.registration.registered then
+    if model.registration.registered then -- TODO and can register
         div [] [
             text "You're registered!"
             , a [ href "/register" ] [ text "Change your answers."] ]
@@ -444,7 +497,13 @@ voucherDecoder = JD.map2 Voucher
                     (JD.at ["code"] JD.string)
                     (JD.at ["expires"] Json.Decode.Extra.datetime)
 
+ticketDecoder : JD.Decoder Ticket
+ticketDecoder = JD.map2 Ticket
+                    (JD.at ["order"] JD.string)
+                    (JD.maybe <| JD.at ["pdf_url"] JD.string )
+
 registrationDecoder : JD.Decoder Registration
-registrationDecoder = JD.map2 Registration
+registrationDecoder = JD.map3 Registration
                         (JD.at ["registered"] JD.bool)
+                        (JD.maybe <| JD.at ["tickets"] ticketDecoder)
                         (JD.at ["vouchers"] (JD.list voucherDecoder))

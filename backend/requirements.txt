@@ -1,3 +1,4 @@
+sentry-sdk==0.6.9
 requests==2.21.0
 flask-oidc==1.4.0
 psycopg2-binary==2.7.6.1

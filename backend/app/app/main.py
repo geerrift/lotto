@@ -11,6 +11,13 @@ import json
 import logging
 from logging.config import dictConfig
 from flask.logging import default_handler
+import sentry_sdk
+from sentry_sdk import capture_exception
+sentry_sdk.init("https://a1f5533e1530460bbe64c7c0afc238e7@sentry.io/1378997")
+
+import email
+
+# TODO actually support multiple lotteries
 
 app = Flask(__name__)
 logging.getLogger().addHandler(default_handler)
@@ -78,8 +85,8 @@ class Lottery(db.Model):
     lottery_end = db.Column(db.DateTime)
     transfer_start = db.Column(db.DateTime)
     transfer_end = db.Column(db.DateTime)
-    fcfs_voucher = (db.String(500))
-    child_voucher = (db.String(500))
+    fcfs_voucher = db.Column(db.String(500))
+    child_voucher = db.Column(db.String(500))
 
     def __repr__(self):
         return '<Lottery %r>' % self.id
@@ -99,12 +106,14 @@ class Lottery(db.Model):
         return self.lottery_end < datetime.now()
 
     def get_random_borderling(self):
-        return Borderling.query.filter(Borderling.lottery_id == self.id, Voucher... ).order_by(func.random()).first()
+        return Borderling.query.filter(Borderling.lottery_id == self.id,
+                                       ~Borderling.vouchers.any() ).order_by(
+                                           func.random()).first()
 
     def to_dict(self):
         return { "can_register": self.registrationAllowed(),
                  "can_transfer": self.transferAllowed(),
-                 "questions": [ qs.id for qs in Questionset.query.filter_by(lottery_id=self.id).all() ]}
+                 "questions": [ qs.id for qs in self.questionsets ]}
 
 class Borderling(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -118,31 +127,35 @@ class Borderling(db.Model):
     def __repr__(self):
         return '<Borderling %r>' % self.email
 
-    def lottery(self):
-        return Lottery.query.filter(Lottery.id == self.lottery_id).first()
-
-    def isChild():
-        q = Question.query.filter(Question.tag == "dob").first()
-        a = Answer.query.filter(Answer.borderling_id == self.id, question == q.id).first()
+    def isChild(self):
+        q = Question.query.filter(Question.tag == "DOB").first()
+        if not q:
+            return False
+        a = Answer.query.filter(Answer.borderling_id == self.id,
+                                Answer.question.any(Question.id == q.id)).first()
         try:
             dob = datetime.strptime(a.text, "%Y-%m-%d") # TODO
         except:
             return False
-        return dob > datetime.now()-datetime.timedelta(days = 13*365)
+        return dob > datetime.now()-timedelta(days = 13*365)
 
     def getVouchers(self):
-        if self.isChild():
-            return [ lottery.child_voucher ]
-        elif lottery.isFCFS():
-            return [ lottery.fcfs_voucher ]
+        lottery_ = get_lottery() # TODO
+        if self.isChild() and (lottery_.lotteryRunning() or lottery_.isFCFS()):
+            return [ lottery_.child_voucher ]
+        elif lottery_.isFCFS():
+            return [ lottery_.fcfs_voucher ]
         else:
             return [ v.to_dict() for v in self.vouchers ]
 
     def isRegistered(self, lottery):
-        return self in get_lottery().borderlings
+        return self in lottery.borderlings
 
     def to_dict(self, lottery):
+        tickets = Voucher.query.filter(Voucher.borderling_id == self.id,
+                                       Voucher.order.any()).first()
         return { "registered": self.isRegistered(lottery),
+                 "tickets": tickets.ticket_dict(),
                  "vouchers": self.getVouchers() }
 
 class Answer(db.Model):
@@ -188,7 +201,7 @@ class Question(db.Model):
         prev = db.session.query(Answer).filter(Answer.id == self.answer_id, Answer.borderling_id == u.id).first()
         if type(v) != list:
             if prev:
-                app.logger.info("User {} Question {}: Replacing {:s} with {:s}".format(u.id, q.id, prev.text, v))
+                app.logger.info("User {}: Replacing {:s} with {:s}".format(u.id, prev.text, v))
                 prev.text = v
             else:
                 db.session.add(Answer(question = [self], borderling_id = u.id, text = v))
@@ -196,7 +209,7 @@ class Question(db.Model):
             v = ",".join(v)
             prev = db.session.query(Answer).filter(Answer.id == self.answer_id, Answer.borderling_id == u.id).first()
             if prev:
-                app.logger.info("User {} Question {}: Replacing {:s} with {:s}".format(u.id, q.id, prev.text, v))
+                app.logger.info("User {}: Replacing {:s} with {:s}".format(u.id, prev.text, v))
                 prev.selections = v
             else:
                 db.session.add(Answer(question = [self], borderling_id = u.id, selections = v))
@@ -244,29 +257,60 @@ class Voucher(db.Model):
     code = db.Column(db.String(1000), unique=True, nullable=False)
     expires = db.Column(db.DateTime, unique=False, nullable=True)
     borderling_id = db.Column(db.Integer, db.ForeignKey("borderling.id"))
+    gifted_to = db.Column(db.Integer, db.ForeignKey("borderling.id"))
     order = db.Column(db.String(1000), unique=True, nullable=True)
 
     def __repr__(self):
         return '<Voucher: %r>' % self.code
 
+    def ticket_dict(self):
+        # TODO pdf_url
+        return { "order": self.order }
+
     def to_dict(self):
         return { "code": self.code, "expires": self.expires }
-    #def transfer -- check owner
+
+    def isTicket(self):
+        if self.order:
+            return True
+        return False
+
+    def transfer(self, origin, target):
+        # not checking if transfers are allowed here because it's used by
+        # gifting and webhooks
+        if orgin.id != self.borderling_id:
+            return False
+        self.borderling_id = target.id
+        self.gifted_to = None
+        db.session.commit()
+        return True
+
+    def gift_to(self, origin, target):
+        if orgin.id != self.borderling_id and not self.order:
+            app.logger.warn("gift_to: {} tried to gift ticket to {}, but voucher is either not paid for, or is not owned by source".format(origin, target))
+            return False
+        if Voucher.query.filter(Voucher.borderling_id == target.id, Voucher.order.any()):
+            app.logger.warn("gift_to: {} tried to gift ticket to {} who already has one".format(origin, target))
+            # TODO return errors
+            return False
+        self.gifted_to = target.id
+        db.session.commit()
+        return True
 
 
-def get_or_create(model,
-                      **kwargs):
+
+def get_or_create(model, **kwargs):
     try:
         return db.session.query(model).filter_by(**kwargs).one()
     except NoResultFound:
         created = model(**kwargs)
-        try:
-            db.session.add(created)
-            db.session.commit()
-            return created
-        except IntegrityError:
-            db.session.rollback()
-            return db.session.query(model).filter_by(**kwargs).one()
+        #try: TODO
+        db.session.add(created)
+        db.session.commit()
+        return created
+        #except IntegrityError:
+        #    db.session.rollback()
+        #    return db.session.query(model).filter_by(**kwargs).one()
 
 @app.route('/api/registration', methods=['GET', 'POST'])
 @oidc.accept_token(require_token=True)
@@ -277,6 +321,7 @@ def registration():
         if lottery.registrationAllowed():
             lottery.borderlings.append(u)
             db.session.commit()
+            email.registration_complete(u.email)
     return jsonify(u.to_dict(lottery))
 
 @app.route('/api/lottery')
@@ -295,11 +340,69 @@ def questionset(qs):
             q.answer(u, v)
     return jsonify(Questionset.query.filter_by(id=qs).first().to_dict(u))
 
+@app.route('/api/transfer', methods=['POST'])
+@oidc.accept_token(require_token=True)
+def transfer_voucher():
+    if get_lottery().transferAllowed():
+        u = get_or_create(Borderling, email=g.oidc_token_info['email'])
+        r = request.get_json()
+        voucher = Voucher.query.filter(Voucher.code == r.voucher).first()
+        dest = Borderling.query.filter(Borderling.email == r.email).first()
+        if voucher and to:
+            result = voucher.transfer(u, dest)
+            if result:
+                email.voucher_transfer(dest, u, voucher.expires)
+            return jsonify({"result": result})
+    return jsonify({"result": False})
+
+@app.route('/api/gift', methods=['POST'])
+@oidc.accept_token(require_token=True)
+def gift_voucher():
+    u = get_or_create(Borderling, email=g.oidc_token_info['email'])
+    r = request.get_json()
+    voucher = Voucher.query.filter(Voucher.code == r.voucher).first()
+    dest = Borderling.query.filter(Borderling.email == r.email).first()
+    if voucher and to:
+        return jsonify({"result": voucher.gift_to(u, dest)})
+    return jsonify({"result": False})
 
 @app.route('/')
 def route_root():
     index_path = os.path.join(app.static_folder, 'index.html')
     return send_file(index_path)
+
+# Internal stuff
+@app.route('/_/cron')
+def periodic():
+    do_lottery()
+    return "k"
+
+@app.route('/_/webhooks/pretix')
+def pretix_webhook():
+    d = request.get_json()
+    if d.action == "pretix.event.order.paid":
+        #{"notification_id": 117, "organizer": "borderland", "event": "test", "code": "Z9M9V", "action": "pretix.event.order.paid"}
+        orderposition = pretix_order_info(d.code).positions[0] # TODO
+        pretix_voucher = pretix_voucher_info(orderposition.voucher)
+        voucher = Voucher.query.filter(Voucher.code == pretix_voucher.code)
+        borderling = Borderling.query.filter(Borderling.id == voucher.borderling_id).first()
+        # TODO update download link
+        if not voucher.order:
+            voucher.order = d.code # update order info
+            if voucher.gifted_to:
+                sender = Borderling.query.filter(Borderling.id == voucher.borderling_id).first()
+                recipient = Borderling.query.filter(Borderling.id == voucher.gifted_to).first()
+                if Voucher.query.filter(Voucher.borderling_id == target.id, ~Voucher.order.any()):
+                    voucher.transfer(sender, recipient)
+                    email.gifted_ticket(recipient, sender)
+                else:
+                    app.logger.error("Webhook: Order {} gifted to {} who already has ticket".format(d.code, target))
+            else:
+                email.order_complete(borderling.email)
+        db.session.commit()
+        pretix_update_order_name(d.code, borderling.pretix_name())
+    return "k"
+
 
 # Everything not declared before (not a Flask route / API endpoint)...
 @app.route('/<path:path>')
@@ -314,21 +417,23 @@ def route_frontend(path):
         index_path = os.path.join(app.static_folder, 'index.html')
         return send_file(index_path)
 
-# Internal stuff
-@app.route('/_/cron')
-def periodic():
-    do_lottery()
-    return "k"
-
 def do_lottery():
     lottery = get_lottery()
     if lottery.lotteryRunning():
-        borderling = lottery.get_random_borderling()
-        if borderling: # or something
-            get_vouchers(borderling)
+        while True:
+            borderling = lottery.get_random_borderling()
+            if borderling:
+                if not borderling.isChild():
+                    if not pretix_get_vouchers(borderling):
+                        break
+            else:
+                break
 
+def generate_code():
+    return  "".join(random.sample([ chr(c) for c in range(ord('A'), ord('Z')+1) ]
+                                  + [ str(i) for i in range(1,9)], 25))
 
-def get_vouchers():
+def pretix_get_vouchers():
     valid_until = datetime.now()+timedelta(**expiration_delta)
 
     r = requests.post("https://{}/api/v1/organizers/{}/events/{}/vouchers/batch_create/".format(host, org, event),
@@ -377,30 +482,56 @@ def get_vouchers():
                 code = v["code"],
                 expires = valid_until
             ))
-        # TODO borderling.email_voucher()
         db.session.commit()
+        email.voucher_allocated(borderling.email)
+        return True
     else:
         print("Unable to create vouchers: {} {}".format(r.status_code, r.text))
+        return False
+
+def pretix_order_info(code):
+    r = requests.get("https://{}/api/v1/organizers/{}/events/{}/orders/{}/".format(host, org, event, code),
+                     headers = {
+                      "Authorization": "Token {}".format(pretix_token)
+                  })
+    if r.status_code == 200:
+        return r.json()
+    app.logger.warn("Error getting pretix order info: {} {}".format(r.status_code, r.text))
+    return None
+
+def pretix_voucher_info(vid):
+    r = requests.get("https://{}/api/v1/organizers/{}/events/{}/vouchers/{}/".format(host, org, event, vid),
+                     headers = {
+                      "Authorization": "Token {}".format(pretix_token)
+                  })
+    if r.status_code == 200:
+        return r.json()
+    # {
+    #   "id": 1,
+    #   "code": "43K6LKM37FBVR2YG",
+    #   "max_usages": 1,
+    #   "redeemed": 0,
+    #   "valid_until": null,
+    #   "block_quota": false,
+    #   "allow_ignore_quota": false,
+    #   "price_mode": "set",
+    #   "value": "12.00",
+    #   "item": 1,
+    #   "variation": null,
+    #   "quota": null,
+    #   "tag": "testvoucher",
+    #   "comment": "",
+    #   "subevent": null
+    # }
+    app.logger.warn("Error getting pretix voucher info: {} {}".format(r.status_code, r.text))
+    return None
 
 
-
-
-@app.route('/_/webhooks/pretix')
-def pretix_webhook():
-    # case action ..
-      #{"notification_id": 117, "organizer": "borderland", "event": "test", "code": "Z9M9V", "action": "pretix.event.order.paid"}
-    # pretix_get_voucher_for_code(code)
-    # voucher.order = code
-    # pretix_update_order_name
-    # update download link
-    return "k"
-
-
+def pretix_update_order_name(a, b):
+    app.logger.warn("UNIMPLEMENTED update {} with {}".format(a, b))
 
 def db_test_data():
     lottery = get_lottery()
-    borderling_a = Borderling(email="a")
-    db.session.add(borderling_a)
     db.session.commit()
     personal_qs = Questionset(lottery_id = lottery.id, priority=10, name="Personal questions",description='''To make the lottery fair we need to check your ID when you arrive at the port. Please fill out the following like it appears on an official document.
 
@@ -468,12 +599,15 @@ Please let us know if you have any special skills or relevant experience and wou
 
 def get_lottery():
     return get_or_create(Lottery,
-                                registration_start = datetime(2019,1,1,12,0),
-                                registration_end = datetime(2019,2,1,12,0),
-                                lottery_start = datetime(2019,1,1,12,0),
-                                lottery_end = datetime(2019,2,1,12,0),
-                                transfer_start = datetime(2019,1,1,12,0),
-                                transfer_end = datetime(2019,2,1,12,0))
+                         registration_start = datetime(2019,1,1,12,0),
+                         registration_end = datetime(2019,2,1,12,0),
+                         lottery_start = datetime(2019,1,1,12,0),
+                         lottery_end = datetime(2019,2,1,12,0),
+                         transfer_start = datetime(2019,1,1,12,0),
+                         transfer_end = datetime(2019,2,1,12,0),
+                         fcfs_voucher = "fcfs",
+                         child_voucher = "child")
+
 #db.drop_all()
 db.create_all()
 

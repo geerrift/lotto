@@ -1,0 +1,68 @@
+
+--- before test ---
+
+# extend registraion model: email, name?
+# extend lottery model: item to buy, pretix event url
+
+- frontend
+# Transfers
+# gifting
+
+
+
+
+---- then
+# fix service
+minitest
+write todo / bug report document
+
+
+# much more logging
+# Nothing in view models
+
+--- tricky ---
+
+
+Related:
+# Frontend: deal with 401
+# Frontend: Refresh tokens
+# Frontend: pre-login front page
+
+
+3. Update order name
+
+
+--- design things ---
+tooltips
+
+
+--- after test ---
+# children and fcfs: special text?
+pretix module
+
+# Frontend: Overlay loading info and errors
+* pretix cronjob
+
+* make list of pretix attributes to set
+  * emails from pretix: disable
+
+pretty emails
+
+# ping elb then test database
+
+- frontend: modules
+Documentation:
+  after refactor
+  backend
+  frontend
+
+IAM dreams integration
+
+Data protection contact info
+
+# question ordering
+# backend: store IP address? account creation fraud thing
+# refactor - model, etc
+
+# data protection
+
