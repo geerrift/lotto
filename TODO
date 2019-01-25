@@ -9,6 +9,9 @@
 # gifting
 
 
+sentry getenv
+list getenv
+
 # errror: result of registration
 
 ---- then

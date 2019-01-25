@@ -13,7 +13,8 @@ from logging.config import dictConfig
 from flask.logging import default_handler
 import sentry_sdk
 from sentry_sdk import capture_exception
-sentry_sdk.init("https://a1f5533e1530460bbe64c7c0afc238e7@sentry.io/1378997")
+
+os.getenv("SENTRY_URL") and sentry_sdk.init(os.getenv("SENTRY_URL"))
 
 import lottomail
 
