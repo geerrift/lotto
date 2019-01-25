@@ -9,7 +9,7 @@
 # gifting
 
 
-
+# errror: result of registration
 
 ---- then
 # fix service
@@ -19,6 +19,8 @@ write todo / bug report document
 
 # much more logging
 # Nothing in view models
+
+# fix webhook url in pretix
 
 --- tricky ---
 

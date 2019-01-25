@@ -15,7 +15,7 @@ import sentry_sdk
 from sentry_sdk import capture_exception
 sentry_sdk.init("https://a1f5533e1530460bbe64c7c0afc238e7@sentry.io/1378997")
 
-import email
+import lottomail
 
 # TODO actually support multiple lotteries
 
@@ -120,7 +120,7 @@ class Borderling(db.Model):
     lottery_id = db.Column(db.Integer, db.ForeignKey("lottery.id"))
     email = db.Column(db.String(120), unique=True, nullable=False)
     ticket = db.Column(db.String(120), unique=True)
-    vouchers = db.relationship('Voucher', backref='borderling', lazy = True)
+    vouchers = db.relationship('Voucher', backref='Borderling', lazy = True)
     answers = db.relationship('Answer', backref='Borderling', lazy = True)
     admin = db.Column(db.Boolean, default=False)
 
@@ -153,9 +153,9 @@ class Borderling(db.Model):
 
     def to_dict(self, lottery):
         tickets = Voucher.query.filter(Voucher.borderling_id == self.id,
-                                       Voucher.order.any()).first()
+                                       Voucher.order == "").first()
         return { "registered": self.isRegistered(lottery),
-                 "tickets": tickets.ticket_dict(),
+                 "tickets": tickets and tickets.ticket_dict(),
                  "vouchers": self.getVouchers() }
 
 class Answer(db.Model):
@@ -257,7 +257,7 @@ class Voucher(db.Model):
     code = db.Column(db.String(1000), unique=True, nullable=False)
     expires = db.Column(db.DateTime, unique=False, nullable=True)
     borderling_id = db.Column(db.Integer, db.ForeignKey("borderling.id"))
-    gifted_to = db.Column(db.Integer, db.ForeignKey("borderling.id"))
+    gifted_to = db.Column(db.Integer)
     order = db.Column(db.String(1000), unique=True, nullable=True)
 
     def __repr__(self):
@@ -321,7 +321,7 @@ def registration():
         if lottery.registrationAllowed():
             lottery.borderlings.append(u)
             db.session.commit()
-            email.registration_complete(u.email)
+            lottomail.registration_complete(u.email)
     return jsonify(u.to_dict(lottery))
 
 @app.route('/api/lottery')
@@ -351,7 +351,7 @@ def transfer_voucher():
         if voucher and to:
             result = voucher.transfer(u, dest)
             if result:
-                email.voucher_transfer(dest, u, voucher.expires)
+                lottomail.voucher_transfer(dest, u, voucher.expires)
             return jsonify({"result": result})
     return jsonify({"result": False})
 
@@ -394,11 +394,11 @@ def pretix_webhook():
                 recipient = Borderling.query.filter(Borderling.id == voucher.gifted_to).first()
                 if Voucher.query.filter(Voucher.borderling_id == target.id, ~Voucher.order.any()):
                     voucher.transfer(sender, recipient)
-                    email.gifted_ticket(recipient, sender)
+                    lottomail.gifted_ticket(recipient, sender)
                 else:
                     app.logger.error("Webhook: Order {} gifted to {} who already has ticket".format(d.code, target))
             else:
-                email.order_complete(borderling.email)
+                lottomail.order_complete(borderling.email)
         db.session.commit()
         pretix_update_order_name(d.code, borderling.pretix_name())
     return "k"
@@ -483,7 +483,7 @@ def pretix_get_vouchers():
                 expires = valid_until
             ))
         db.session.commit()
-        email.voucher_allocated(borderling.email)
+        lottomail.voucher_allocated(borderling.email)
         return True
     else:
         print("Unable to create vouchers: {} {}".format(r.status_code, r.text))
