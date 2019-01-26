@@ -1,3 +1,4 @@
+import os
 import smtplib
 from email.message import EmailMessage
 
@@ -9,12 +10,13 @@ def new_message(recipient, subject, body):
     msg = EmailMessage()
     msg.set_content(body)
 
-    msg['Subject'] = 'The contents of %s' % textfile
+    msg['Subject'] = subject
     msg['From'] = "Borderland Memberships <noreply@theborderland.se>"
     msg['To'] = recipient
 
 def send_message(msg):
     s = smtplib.SMTP(os.getenv("SMTP_HOST"))
+    s.connect()
     s.starttls()
     s.login(os.getenv("SMTP_USER"), os.getenv("SMTP_PASS"))
     s.send_message(msg)

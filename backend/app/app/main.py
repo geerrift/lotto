@@ -9,6 +9,7 @@ import requests
 import os
 import json
 import logging
+import random
 from logging.config import dictConfig
 from flask.logging import default_handler
 import sentry_sdk
@@ -67,8 +68,9 @@ app.config.update({
 pretix_token = os.getenv("PRETIX_TOKEN")
 host = "pretix.theborderland.se"
 org = "borderland"
-event = "test"
-item = 1
+event = "test3"
+item = 5
+child_item = 6
 expiration_delta = { "days": 2 }
 
 oidc = OpenIDConnect(app)
@@ -88,6 +90,9 @@ class Lottery(db.Model):
     transfer_end = db.Column(db.DateTime)
     fcfs_voucher = db.Column(db.String(500))
     child_voucher = db.Column(db.String(500))
+    child_item = db.Column(db.Integer)
+    ticket_item = db.Column(db.Integer)
+    pretix_event_url = db.Column(db.String(500))
 
     def __repr__(self):
         return '<Lottery %r>' % self.id
@@ -114,6 +119,9 @@ class Lottery(db.Model):
     def to_dict(self):
         return { "can_register": self.registrationAllowed(),
                  "can_transfer": self.transferAllowed(),
+                 "child_item": self.child_item,
+                 "ticket_item": self.ticket_item,
+                 "pretix_event_url": self.pretix_event_url,
                  "questions": [ qs.id for qs in self.questionsets ]}
 
 class Borderling(db.Model):
@@ -143,9 +151,11 @@ class Borderling(db.Model):
     def getVouchers(self):
         lottery_ = get_lottery() # TODO
         if self.isChild() and (lottery_.lotteryRunning() or lottery_.isFCFS()):
-            return [ lottery_.child_voucher ]
+            return [ { "code": lottery_.child_voucher,
+                       "expires": lottery_.transfer_end.isoformat()+"+01:00" # TODO timezones
+            } ]
         elif lottery_.isFCFS():
-            return [ lottery_.fcfs_voucher ]
+            return [ { "code": lottery_.fcfs_voucher, "expires": lottery_.transfer_end.isoformat()+"+01:00" } ]
         else:
             return [ v.to_dict() for v in self.vouchers ]
 
@@ -157,6 +167,7 @@ class Borderling(db.Model):
                                        Voucher.order == "").first()
         return { "registered": self.isRegistered(lottery),
                  "tickets": tickets and tickets.ticket_dict(),
+                 "email": self.email,
                  "vouchers": self.getVouchers() }
 
 class Answer(db.Model):
@@ -202,7 +213,7 @@ class Question(db.Model):
         prev = db.session.query(Answer).filter(Answer.id == self.answer_id, Answer.borderling_id == u.id).first()
         if type(v) != list:
             if prev:
-                app.logger.info("User {}: Replacing {:s} with {:s}".format(u.id, prev.text, v))
+                app.logger.info("User {}: Replacing {} with {}".format(u.id, prev.text, v))
                 prev.text = v
             else:
                 db.session.add(Answer(question = [self], borderling_id = u.id, text = v))
@@ -210,7 +221,7 @@ class Question(db.Model):
             v = ",".join(v)
             prev = db.session.query(Answer).filter(Answer.id == self.answer_id, Answer.borderling_id == u.id).first()
             if prev:
-                app.logger.info("User {}: Replacing {:s} with {:s}".format(u.id, prev.text, v))
+                app.logger.info("User {}: Replacing {} with {}".format(u.id, prev.text, v))
                 prev.selections = v
             else:
                 db.session.add(Answer(question = [self], borderling_id = u.id, selections = v))
@@ -269,7 +280,7 @@ class Voucher(db.Model):
         return { "order": self.order }
 
     def to_dict(self):
-        return { "code": self.code, "expires": self.expires }
+        return { "code": self.code, "expires": self.expires.isoformat()+"+01:00" }
 
     def isTicket(self):
         if self.order:
@@ -322,6 +333,8 @@ def registration():
         if lottery.registrationAllowed():
             lottery.borderlings.append(u)
             db.session.commit()
+            # TODO check if not already registered
+            # TODO catch exceptions here
             lottomail.registration_complete(u.email)
     return jsonify(u.to_dict(lottery))
 
@@ -347,13 +360,14 @@ def transfer_voucher():
     if get_lottery().transferAllowed():
         u = get_or_create(Borderling, email=g.oidc_token_info['email'])
         r = request.get_json()
-        voucher = Voucher.query.filter(Voucher.code == r.voucher).first()
-        dest = Borderling.query.filter(Borderling.email == r.email).first()
+        voucher = Voucher.query.filter(Voucher.code == r['voucher']).first()
+        dest = Borderling.query.filter(Borderling.email == r['email']).first()
         if voucher and to:
             result = voucher.transfer(u, dest)
             if result:
                 lottomail.voucher_transfer(dest, u, voucher.expires)
             return jsonify({"result": result})
+        # TODO return updated registration
     return jsonify({"result": False})
 
 @app.route('/api/gift', methods=['POST'])
@@ -361,8 +375,8 @@ def transfer_voucher():
 def gift_voucher():
     u = get_or_create(Borderling, email=g.oidc_token_info['email'])
     r = request.get_json()
-    voucher = Voucher.query.filter(Voucher.code == r.voucher).first()
-    dest = Borderling.query.filter(Borderling.email == r.email).first()
+    voucher = Voucher.query.filter(Voucher.code == r['voucher']).first()
+    dest = Borderling.query.filter(Borderling.email == r['email']).first()
     if voucher and to:
         return jsonify({"result": voucher.gift_to(u, dest)})
     return jsonify({"result": False})
@@ -378,30 +392,33 @@ def periodic():
     do_lottery()
     return "k"
 
-@app.route('/_/webhooks/pretix')
+@app.route('/_/webhooks/pretix', methods=['POST'])
 def pretix_webhook():
     d = request.get_json()
-    if d.action == "pretix.event.order.paid":
+    if d['action'] == "pretix.event.order.paid":
         #{"notification_id": 117, "organizer": "borderland", "event": "test", "code": "Z9M9V", "action": "pretix.event.order.paid"}
-        orderposition = pretix_order_info(d.code).positions[0] # TODO
-        pretix_voucher = pretix_voucher_info(orderposition.voucher)
-        voucher = Voucher.query.filter(Voucher.code == pretix_voucher.code)
-        borderling = Borderling.query.filter(Borderling.id == voucher.borderling_id).first()
+        orderposition = pretix_order_info(d['code'])['positions'][0] # TODO
+        pretix_voucher = pretix_voucher_info(orderposition['voucher'])
+        app.logger.info("Webhook order.paid: {} for {}".format(d['code'], pretix_voucher))
+        voucher = Voucher.query.filter(Voucher.code == pretix_voucher['code']).first()
+        borderling = Borderling.query.filter(Borderling.id == Voucher.borderling_id).first()
         # TODO update download link
         if not voucher.order:
-            voucher.order = d.code # update order info
+            voucher.order = d['code'] # update order info
             if voucher.gifted_to:
-                sender = Borderling.query.filter(Borderling.id == voucher.borderling_id).first()
-                recipient = Borderling.query.filter(Borderling.id == voucher.gifted_to).first()
+                sender = Borderling.query.filter(Borderling.id == Voucher.borderling_id).first()
+                recipient = Borderling.query.filter(Borderling.id == Voucher.gifted_to).first()
                 if Voucher.query.filter(Voucher.borderling_id == target.id, ~Voucher.order.any()):
+                    app.logger.info("Webhook: transfering gifted voucher from {} to {}".format(sender, recipient))
                     voucher.transfer(sender, recipient)
                     lottomail.gifted_ticket(recipient, sender)
                 else:
-                    app.logger.error("Webhook: Order {} gifted to {} who already has ticket".format(d.code, target))
+                    app.logger.error("Webhook: Order {} gifted to {} who already has ticket".format(d['code'], target))
             else:
+                app.logger.info("Webhook: purchase completed for {}".format(borderling))
                 lottomail.order_complete(borderling.email)
         db.session.commit()
-        pretix_update_order_name(d.code, borderling.pretix_name())
+        pretix_update_order_name(d['code'], borderling.pretix_name())
     return "k"
 
 
@@ -423,18 +440,21 @@ def do_lottery():
     if lottery.lotteryRunning():
         while True:
             borderling = lottery.get_random_borderling()
+            app.logger.info("Cron: drew {}".format(borderling))
             if borderling:
                 if not borderling.isChild():
                     if not pretix_get_vouchers(borderling):
                         break
             else:
                 break
+    else:
+        app.logger.info("Cron: Lottery not running")
 
 def generate_code():
     return  "".join(random.sample([ chr(c) for c in range(ord('A'), ord('Z')+1) ]
                                   + [ str(i) for i in range(1,9)], 25))
 
-def pretix_get_vouchers():
+def pretix_get_vouchers(borderling):
     valid_until = datetime.now()+timedelta(**expiration_delta)
 
     r = requests.post("https://{}/api/v1/organizers/{}/events/{}/vouchers/batch_create/".format(host, org, event),
@@ -478,6 +498,7 @@ def pretix_get_vouchers():
 
     if r.status_code == 201:
         for v in r.json():
+            app.logger.info("Created voucher {}".format(v['code']))
             db.session.add(Voucher(
                 borderling_id = borderling.id,
                 code = v["code"],
@@ -607,7 +628,11 @@ def get_lottery():
                          transfer_start = datetime(2019,1,1,12,0),
                          transfer_end = datetime(2019,2,1,12,0),
                          fcfs_voucher = "fcfs",
-                         child_voucher = "child")
+                         child_voucher = "child",
+                         child_item = "item_{}=1".format(child_item),
+                         ticket_item = "item_{}=1".format(item),
+                         pretix_event_url = "https://pretix.theborderland.se/borderland/{}/".format(event)
+    )
 
 #db.drop_all()
 db.create_all()

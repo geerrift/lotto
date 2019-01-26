@@ -1,3 +1,4 @@
+port module Main exposing (..)
 import Browser
 import Browser.Navigation as Nav
 import Html exposing (..)
@@ -15,7 +16,9 @@ import Dict exposing (..)
 import Debug
 import Set exposing (..)
 
--- 
+
+port renderButtons : () -> Cmd msg
+--
 
 type QuestionType
     = Text
@@ -46,6 +49,9 @@ type alias QuestionSet
 type alias Lottery
     = { can_register : Bool
       , can_transfer : Bool
+      , childItem : String
+      , ticketItem : String
+      , pretixUrl : String
       , questions : List Int }
 
 type alias Voucher
@@ -59,6 +65,7 @@ type alias Ticket
 type alias Registration
     = { registered : Bool
       , tickets : Maybe Ticket
+      , email : String
       , vouchers : List Voucher }
 
 type alias Model
@@ -68,7 +75,8 @@ type alias Model
       , questionSets: List QuestionSet
       , questions : Dict Int Question
       , lottery: Lottery
-      , registration: Registration
+      , registration: Maybe Registration
+      , transfer_to : String
       , token: String }
 
 type alias HttpResource t = Result Http.Error t
@@ -91,6 +99,10 @@ type Msg
   | PostAnswers QuestionSet Bool
   | Posted (HttpResource ())
   | ToggleCheckbox Question Option Bool
+  | TransferFieldInput String
+  | TransferInvite Voucher
+  | GiftTicket Voucher
+  | RenderButtons
 
 --
 
@@ -103,6 +115,7 @@ main =
        , onUrlChange = UrlChanged
        , onUrlRequest = LinkClicked }
 
+
 init : String -> Url.Url -> Nav.Key -> ( Model, Cmd Msg )
 init flags url key
     = ( Model
@@ -111,8 +124,9 @@ init flags url key
             (UP.parse routeParser url) -- FIXME
             []
             Dict.empty
-            (Lottery False False [])
-            (Registration False Nothing [])
+            (Lottery False False "" "" "" [])
+            Nothing --(Registration False Nothing "" [])
+            ""
             flags
       , Cmd.batch [ getLottery flags , getRegistration flags ] )
 
@@ -161,16 +175,16 @@ update msg model =
 
     GotLottery result ->
         case result of
-            Ok l -> ( { model | lottery = l }
+            Ok l -> ( { model | lottery = Debug.log "lol" l }
                     , Cmd.batch (List.map
                                      (\q -> getQuestions model.token q)
                                      l.questions))
-            Err _ -> ( model, Cmd.none )
+            Err e -> (Debug.log ((Debug.toString e )) model, Cmd.none )
 
     GotRegistration result ->
         case result of
-            Ok r -> ( { model | registration = r }, Cmd.none )
-            Err _ -> ( model, Cmd.none )
+            Ok r -> ( { model | registration = Just r }, Cmd.none )
+            Err e -> (Debug.log ((Debug.toString e )) model, Cmd.none )
 
     PostAnswers qs last ->
         ( model
@@ -191,7 +205,7 @@ update msg model =
         , Cmd.none )
     ToggleCheckbox question option v ->
         let
-            newQuestion = { question | selections = 
+            newQuestion = { question | selections =
                                 -- if Set.member option.id question.selections then
                                 if v then
                                     Set.insert option.id question.selections
@@ -202,7 +216,17 @@ update msg model =
         ( { model | questions =
                 Dict.insert question.id newQuestion model.questions }
         , Cmd.none )
-    _ -> ( model, Cmd.none )
+    TransferFieldInput s ->
+        ( { model | transfer_to = s }, Cmd.none )
+    TransferInvite v ->
+        ( model, postTransferInvite v model )
+    GiftTicket v ->
+        ( model, postGiftTicket v model )
+    Posted _ ->
+        ( model, Cmd.none )
+    RenderButtons ->
+        ( model, renderButtons () )
+
 
 subscriptions _ =
   Sub.none
@@ -238,29 +262,48 @@ viewHome : Model -> List (Html Msg)
 viewHome model =
     [ div [] [ h1 [] [ text "Borderland Registraton"]] ]
     ++ [ viewRegistrationStatus model ]
-    ++ [ Maybe.withDefault (text "") <| viewVoucherStatus model]
+    ++ [ Maybe.withDefault (text "") <| viewVoucherStatus model ]
     ++ viewExtraVouchers model
 
 viewExtraVouchers : Model -> List (Html Msg)
 viewExtraVouchers m =
-    case m.registration.vouchers of
-        (_::[]) ->
-            []
-        (_::xs) ->
-            List.map (viewExtraVoucher m) xs
-        _ ->
+    case m.registration of
+        Just r ->
+          case r.vouchers of
+              (_::[]) ->
+                  []
+              (_::xs) ->
+                  List.map (viewExtraVoucher m) xs
+              _ ->
+                  []
+        Nothing ->
             []
 
-viewExtraVoucher : Model -> Voucher -> Html Msg
+viewExtraVoucher : Model -> Voucher -> Maybe (Html Msg)
 viewExtraVoucher m v =
-    div []
-        [
-         text "blah blah input field TODO"
-        ]
+    m.registration |> Maybe.andThen (\r -> div []
+        [ text "blah blah input field TODO"
+        , input [ type_ "email"
+                , placeholder "Registered email"
+                , onInput (TransferFieldInput)
+                ] []
+        , input [ type_ "button"
+                , value "Transfer invite"
+                , onClick (TransferInvite v)
+                ] []
+        , node "pretix-button"
+              [ attribute "event" m.lottery.pretixUrl
+              , attribute "items" m.lottery.ticketItem
+              , attribute "voucher" v.code
+              , attribute "data-email" r.email
+              , on "DOMNodeInserted" (JD.succeed RenderButtons)
+              , onClick (GiftTicket v)
+              ] [ text "Gift Ticket" ]
+        ])
 
 viewVoucherStatus : Model -> Maybe (Html Msg)
 viewVoucherStatus m =
-    case m.registration.tickets of
+    case (Debug.log "tickets" m.registration.tickets) of
         Just t ->
             Just (text "you have a ticket yay etc transfers pdf download etc")
         Nothing ->
@@ -274,19 +317,19 @@ viewPersonalVoucher : Model -> Maybe (Html Msg)
 viewPersonalVoucher m =
     head m.registration.vouchers
         |> Maybe.andThen (\v -> Just <|
-                              div [] [ text "you have a ticket"
+                              div [] [ text "you have a voucher!"
                                      ,  text <| "Expiration epoch : " ++ String.fromInt ((Time.posixToMillis v.expires)) -- TODO
-                                     , viewPretixButton v.code m ])
+                                     , viewPretixButton v.code m.lottery.ticketItem m ])
 
-viewPretixButton : String -> Model -> Html Msg
-viewPretixButton code m =
+viewPretixButton : String -> String -> Model -> Html Msg
+viewPretixButton code item m =
     node "pretix-button"
-        [ attribute "event" "https://pretix.theborderland.se/borderland/test/" -- FIXME
-        , attribute "items" "item_1=1" -- FIXME
+        [ attribute "event" m.lottery.pretixUrl
+        , attribute "items" item
         , attribute "voucher" code
-        --, attribute "data-attendee-name" "" -- -given-name
-        , attribute "data-email" "test@example.org"
-        ] []
+        , attribute "data-email" m.registration.email
+        , on "DOMNodeInserted" (JD.succeed RenderButtons)
+        ] [ text "Purchase membership" ]
 
 viewRegistrationStatus : Model -> Html Msg
 viewRegistrationStatus model =
@@ -424,6 +467,25 @@ postRegistration token =
     authorizedPost Http.emptyBody token "/api/registration"
             (Http.expectJson GotRegistration registrationDecoder)
 
+postTransferInvite : Voucher -> Model -> Cmd Msg
+postTransferInvite v m
+    = authorizedPost
+      (Http.jsonBody (Json.Encode.object [
+                           ("voucher", Json.Encode.string v.code),
+                           ("email", Json.Encode.string m.transfer_to)
+                          ]))
+            m.token "/api/transfer" (Http.expectWhatever Posted) -- TODO update registration
+
+postGiftTicket : Voucher -> Model -> Cmd Msg
+postGiftTicket v m
+    = authorizedPost
+      (Http.jsonBody (Json.Encode.object [
+                           ("voucher", Json.Encode.string v.code),
+                           ("email", Json.Encode.string m.transfer_to)
+                          ]))
+          m.token "/api/gift" (Http.expectWhatever Posted) -- TODO update registration
+
+
 getLottery : String -> Cmd Msg
 getLottery token =
     authorizedGet token "/api/lottery" (Http.expectJson GotLottery lotteryDecoder)
@@ -487,9 +549,12 @@ questionTypeDecoder = JD.string |> JD.andThen
                           JD.fail <| "Unknown option type " ++ e)
 
 lotteryDecoder : JD.Decoder Lottery
-lotteryDecoder = JD.map3 Lottery
+lotteryDecoder = JD.map6 Lottery
                     (JD.at ["can_register"] JD.bool)
                     (JD.at ["can_transfer"] JD.bool)
+                    (JD.at ["child_item"] JD.string)
+                    (JD.at ["ticket_item"] JD.string)
+                    (JD.at ["pretix_event_url"] JD.string)
                     (JD.at ["questions"] (JD.list JD.int))
 
 voucherDecoder : JD.Decoder Voucher
@@ -497,13 +562,14 @@ voucherDecoder = JD.map2 Voucher
                     (JD.at ["code"] JD.string)
                     (JD.at ["expires"] Json.Decode.Extra.datetime)
 
-ticketDecoder : JD.Decoder Ticket
-ticketDecoder = JD.map2 Ticket
+ticketDecoder : JD.Decoder (Maybe Ticket)
+ticketDecoder = JD.maybe <| JD.map2 Ticket
                     (JD.at ["order"] JD.string)
                     (JD.maybe <| JD.at ["pdf_url"] JD.string )
 
 registrationDecoder : JD.Decoder Registration
-registrationDecoder = JD.map3 Registration
+registrationDecoder = JD.map4 Registration
                         (JD.at ["registered"] JD.bool)
-                        (JD.maybe <| JD.at ["tickets"] ticketDecoder)
+                        (JD.at ["tickets"] ticketDecoder)
+                        (JD.at ["email"] JD.string)
                         (JD.at ["vouchers"] (JD.list voucherDecoder))

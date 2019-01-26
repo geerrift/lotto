@@ -1,32 +1,22 @@
 
---- before test ---
-
-# extend registraion model: email, name?
-# extend lottery model: item to buy, pretix event url
-
-- frontend
-# Transfers
-# gifting
+# Nothing in view models
+refactor
+# refactor - model, etc
+pretix module
 
 
-sentry getenv
-list getenv
+fix bug in pretix
 
-# errror: result of registration
+fix email
 
----- then
-# fix service
 minitest
-write todo / bug report document
 
 
 # much more logging
-# Nothing in view models
+write todo / bug report document
 
-# fix webhook url in pretix
-
+# errror: result of registration
 --- tricky ---
-
 
 Related:
 # Frontend: deal with 401
@@ -39,11 +29,11 @@ Related:
 
 --- design things ---
 tooltips
-
+placeholders
+hook enter
 
 --- after test ---
 # children and fcfs: special text?
-pretix module
 
 # Frontend: Overlay loading info and errors
 * pretix cronjob
@@ -67,7 +57,5 @@ Data protection contact info
 
 # question ordering
 # backend: store IP address? account creation fraud thing
-# refactor - model, etc
 
-# data protection
 
