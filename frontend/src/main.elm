@@ -9,15 +9,17 @@ import Url.Parser as UP exposing ((</>))
 import Json.Decode as JD exposing (Decoder, field, string)
 import Json.Decode.Extra
 import Json.Encode
-import Http
 import List exposing (..)
-import Time
 import Dict exposing (..)
-import Debug
 import Set exposing (..)
+import Time
+import Http
+import Debug
 
+--
 
 port renderButtons : () -> Cmd msg
+
 --
 
 type QuestionType
@@ -79,7 +81,8 @@ type alias Model
       , transfer_to : String
       , token: String }
 
-type alias HttpResource t = Result Http.Error t
+type alias HttpResource t
+    = Result Http.Error t
 
 type Route
     = Home
@@ -125,7 +128,7 @@ init flags url key
             []
             Dict.empty
             (Lottery False False "" "" "" [])
-            Nothing --(Registration False Nothing "" [])
+            Nothing
             ""
             flags
       , Cmd.batch [ getLottery flags , getRegistration flags ] )
@@ -134,9 +137,12 @@ routeParser : UP.Parser (Route -> a) a
 routeParser =
     UP.oneOf
         [ UP.map Home UP.top
-          , UP.map QuestionPage (UP.s "questions" </> UP.int)
-          , UP.map RegisterPage (UP.s "register")
+        , UP.map QuestionPage (UP.s "questions" </> UP.int)
+        , UP.map RegisterPage (UP.s "register")
         ]
+
+subscriptions _ =
+  Sub.none
 
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
@@ -228,9 +234,6 @@ update msg model =
         ( model, renderButtons () )
 
 
-subscriptions _ =
-  Sub.none
-
 mkTitle : String -> String
 mkTitle t = "Borderland 2019 - " ++ t
 
@@ -241,7 +244,11 @@ view model =
             { title =
                   mkTitle "Lottery"
             , body =
-                viewHome model }
+                case model.registration of
+                    Just r ->
+                        viewHome model.lottery r
+                    Nothing ->
+                        [] }
 
         Just RegisterPage -> { title =
                                    mkTitle "Registering"
@@ -253,35 +260,31 @@ view model =
             { title =
                   mkTitle "Questions?" -- TODO
             , body =
-                [ viewQuestionPage model int ] }
+                [ viewQuestionPage model.questionSets model.questions int ] }
 
         Nothing -> { title = mkTitle "You're lost"
                    , body = [ text "You're in a maze of websites, all alike." ] }
 
-viewHome : Model -> List (Html Msg)
-viewHome model =
+viewHome : Lottery -> Registration -> List (Html Msg)
+viewHome l r =
     [ div [] [ h1 [] [ text "Borderland Registraton"]] ]
-    ++ [ viewRegistrationStatus model ]
-    ++ [ Maybe.withDefault (text "") <| viewVoucherStatus model ]
-    ++ viewExtraVouchers model
+    ++ [ viewRegistrationStatus r ]
+    ++ [ Maybe.withDefault (text "") <| viewVoucherStatus l r ]
+    ++ viewExtraVouchers l r
 
-viewExtraVouchers : Model -> List (Html Msg)
-viewExtraVouchers m =
-    case m.registration of
-        Just r ->
-          case r.vouchers of
-              (_::[]) ->
-                  []
-              (_::xs) ->
-                  List.map (viewExtraVoucher m) xs
-              _ ->
-                  []
-        Nothing ->
+viewExtraVouchers : Lottery -> Registration -> List (Html Msg)
+viewExtraVouchers l r =
+    case r.vouchers of
+        (_::[]) ->
+            []
+        (_::xs) ->
+            List.map (viewExtraVoucher l r) xs
+        _ ->
             []
 
-viewExtraVoucher : Model -> Voucher -> Maybe (Html Msg)
-viewExtraVoucher m v =
-    m.registration |> Maybe.andThen (\r -> div []
+viewExtraVoucher : Lottery -> Registration -> Voucher -> Html Msg
+viewExtraVoucher l r v =
+    div []
         [ text "blah blah input field TODO"
         , input [ type_ "email"
                 , placeholder "Registered email"
@@ -292,48 +295,48 @@ viewExtraVoucher m v =
                 , onClick (TransferInvite v)
                 ] []
         , node "pretix-button"
-              [ attribute "event" m.lottery.pretixUrl
-              , attribute "items" m.lottery.ticketItem
+              [ attribute "event" l.pretixUrl
+              , attribute "items" l.ticketItem
               , attribute "voucher" v.code
               , attribute "data-email" r.email
               , on "DOMNodeInserted" (JD.succeed RenderButtons)
               , onClick (GiftTicket v)
               ] [ text "Gift Ticket" ]
-        ])
+        ]
 
-viewVoucherStatus : Model -> Maybe (Html Msg)
-viewVoucherStatus m =
-    case (Debug.log "tickets" m.registration.tickets) of
+viewVoucherStatus : Lottery -> Registration -> Maybe (Html Msg)
+viewVoucherStatus l r =
+    case r.tickets of
         Just t ->
             Just (text "you have a ticket yay etc transfers pdf download etc")
         Nothing ->
-            case m.registration.vouchers of
+            case r.vouchers of
                 [] ->
                     Nothing
                 (x::_) ->
-                    viewPersonalVoucher m
+                    viewPersonalVoucher l r
 
-viewPersonalVoucher : Model -> Maybe (Html Msg)
-viewPersonalVoucher m =
-    head m.registration.vouchers
+viewPersonalVoucher : Lottery -> Registration -> Maybe (Html Msg)
+viewPersonalVoucher l r =
+    head r.vouchers
         |> Maybe.andThen (\v -> Just <|
                               div [] [ text "you have a voucher!"
                                      ,  text <| "Expiration epoch : " ++ String.fromInt ((Time.posixToMillis v.expires)) -- TODO
-                                     , viewPretixButton v.code m.lottery.ticketItem m ])
+                                     , viewPretixButton l r v.code l.ticketItem ])
 
-viewPretixButton : String -> String -> Model -> Html Msg
-viewPretixButton code item m =
+viewPretixButton : Lottery -> Registration -> String -> String -> Html Msg
+viewPretixButton l r code item =
     node "pretix-button"
-        [ attribute "event" m.lottery.pretixUrl
+        [ attribute "event" l.pretixUrl
         , attribute "items" item
         , attribute "voucher" code
-        , attribute "data-email" m.registration.email
+        , attribute "data-email" r.email
         , on "DOMNodeInserted" (JD.succeed RenderButtons)
         ] [ text "Purchase membership" ]
 
-viewRegistrationStatus : Model -> Html Msg
-viewRegistrationStatus model =
-    if model.registration.registered then -- TODO and can register
+viewRegistrationStatus : Registration -> Html Msg
+viewRegistrationStatus r =
+    if r.registered then -- TODO and can register
         div [] [
             text "You're registered!"
             , a [ href "/register" ] [ text "Change your answers."] ]
@@ -343,12 +346,12 @@ viewRegistrationStatus model =
             , a [ href "/register" ] [ text "Register"]
             ]
 
-viewQuestionPage : Model -> Int -> Html Msg
-viewQuestionPage model i =
-    case List.drop (i-1) model.questionSets of
+viewQuestionPage : List QuestionSet -> Dict Int Question -> Int -> Html Msg
+viewQuestionPage questionSets questions i =
+    case List.drop (i-1) questionSets of
         (qset::[]) ->
             div []
-                [ viewQuestionSet qset model.questions
+                [ viewQuestionSet qset questions
                 , a [ href "/"
                     , onClick (PostAnswers qset True) ]
                     [ text "Done!" ]
@@ -356,7 +359,7 @@ viewQuestionPage model i =
 
         (qset::_) ->
             div []
-                [ viewQuestionSet qset model.questions
+                [ viewQuestionSet qset questions
                 , a [ href ("/questions/" ++ String.fromInt(i + 1))
                     , onClick (PostAnswers qset False) ]
                     [ text "Next" ]]

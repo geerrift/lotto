@@ -1,21 +1,14 @@
 
-# Nothing in view models
-refactor
-# refactor - model, etc
-pretix module
 
-
-fix bug in pretix
-
-fix email
 
 minitest
 
 
-# much more logging
 write todo / bug report document
 
-# errror: result of registration
+# make error: result of registration
+
+
 --- tricky ---
 
 Related:
@@ -36,7 +29,7 @@ hook enter
 # children and fcfs: special text?
 
 # Frontend: Overlay loading info and errors
-* pretix cronjob
+* pretix cronjo     b
 
 * make list of pretix attributes to set
   * emails from pretix: disable

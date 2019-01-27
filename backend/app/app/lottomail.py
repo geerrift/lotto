@@ -13,10 +13,11 @@ def new_message(recipient, subject, body):
     msg['Subject'] = subject
     msg['From'] = "Borderland Memberships <noreply@theborderland.se>"
     msg['To'] = recipient
+    return msg
 
 def send_message(msg):
     s = smtplib.SMTP(os.getenv("SMTP_HOST"))
-    s.connect()
+    s.connect(os.getenv("SMTP_HOST"))
     s.starttls()
     s.login(os.getenv("SMTP_USER"), os.getenv("SMTP_PASS"))
     s.send_message(msg)
