@@ -10,7 +10,6 @@ from flask.logging import default_handler
 import sentry_sdk
 from sentry_sdk import capture_exception
 
-
 os.getenv("SENTRY_URL") and sentry_sdk.init(os.getenv("SENTRY_URL"))
 
 app = Flask(__name__)
@@ -66,9 +65,9 @@ app.config.update({
 host = "pretix.theborderland.se"
 org = "borderland"
 event = "test3"
+expiration_delta = { "hours": 2 }
 item = 5
 child_item = 6
-expiration_delta = { "days": 2 }
 
 
 oidc = OpenIDConnect(app)
@@ -82,18 +81,7 @@ db.engine.pool._pre_ping = True # TODO look at SQLALCHEMY_POOL_RECYCLE as an alt
 # Get the current lottery, in a silly way
 # TODO actually support multiple lotteries
 def get_lottery():
-    return get_or_create(Lottery,
-                         registration_start = datetime(2019,1,1,12,0),
-                         registration_end = datetime(2019,2,1,12,0),
-                         lottery_start = datetime(2019,1,1,12,0),
-                         lottery_end = datetime(2019,2,1,12,0),
-                         transfer_start = datetime(2019,1,1,12,0),
-                         transfer_end = datetime(2019,2,1,12,0),
-                         fcfs_voucher = "fcfs",
-                         child_voucher = "child",
-                         child_item = "item_{}=1".format(child_item),
-                         ticket_item = "item_{}=1".format(item),
-                         pretix_event_url = "https://pretix.theborderland.se/borderland/{}/".format(event))
+    return Lottery.query.first()
 
 # Assign vouchers as long as we can
 def do_lottery():
@@ -104,7 +92,7 @@ def do_lottery():
             app.logger.info("Cron: drew {}".format(borderling))
             if borderling:
                 if not borderling.isChild():
-                    if not pretix_get_vouchers(borderling):
+                    if not pretix.get_vouchers(borderling):
                         break
             else:
                 break
@@ -114,12 +102,13 @@ def do_lottery():
 # Yay circular imports!
 from views import *
 from models import *
-
-
-if not Lottery.query.first():
-    print("Creating test data")
-    from test_data import db_test_data
-    db_test_data()
+import pretix
 
 if __name__ == '__main__':
+    if not Lottery.query.first():
+        print("Creating test data")
+        from test_data import db_test_data
+        db_test_data()
+
+
     app.run(debug = True)

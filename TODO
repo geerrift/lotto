@@ -1,41 +1,49 @@
+lower expiration
+drop db
+new times
 
 
+Gifting tickets is broken and needs a rethinking
+  - Open pretix differently
+  - Wait for server response
 
-minitest
-
-
-write todo / bug report document
-
-# make error: result of registration
-
+# Frontend: Loading indicator
 
 --- tricky ---
-
-Related:
-# Frontend: deal with 401
-# Frontend: Refresh tokens
-# Frontend: pre-login front page
 
 
 3. Update order name
 
 
---- design things ---
-tooltips
-placeholders
-hook enter
+--- design things that affect implementation ---
 
---- after test ---
-# children and fcfs: special text?
+Tooltips for volunteer questions
 
-# Frontend: Overlay loading info and errors
-* pretix cronjo     b
+Instructive placeholders text where appropriate
 
-* make list of pretix attributes to set
-  * emails from pretix: disable
+Enter key does not function in any of the forms
 
-pretty emails
+There's no indication if you've gotten a special invite, e.g. an Under 13 invite
+or FCFS.
 
+
+-- ---
+
+* pretix cronjob
+* membership cronjob
+
+pretty email text
+pretty HTML emails
+
+-- --
+
+Data protection contact info
+
+Safari polyfill
+
+
+
+# Frontend: pre-login front page
 # ping elb then test database
 
 - frontend: modules
@@ -46,7 +54,6 @@ Documentation:
 
 IAM dreams integration
 
-Data protection contact info
 
 # question ordering
 # backend: store IP address? account creation fraud thing

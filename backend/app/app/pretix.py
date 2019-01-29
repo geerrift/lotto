@@ -1,8 +1,10 @@
 import os
-from main import db
+from main import db, expiration_delta, host, org, event, item, app
+from models import *
 import requests
 import random
 import lottomail
+from datetime import datetime,timedelta
 
 pretix_token = os.getenv("PRETIX_TOKEN")
 
@@ -53,13 +55,16 @@ def get_vouchers(borderling):
                   ])
 
     if r.status_code == 201:
+        first = True
         for v in r.json():
             app.logger.info("Created voucher {}".format(v['code']))
             db.session.add(Voucher(
                 borderling_id = borderling.id,
                 code = v["code"],
-                expires = valid_until
+                expires = valid_until,
+                primary = first
             ))
+            first = False
         db.session.commit()
         lottomail.voucher_allocated(borderling.email)
         return True

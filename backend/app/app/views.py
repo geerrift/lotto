@@ -1,4 +1,4 @@
-from main import app, db, oidc, jsonify, request, send_file, g, get_lottery
+from main import app, db, oidc, jsonify, request, send_file, g, get_lottery, do_lottery
 from models import *
 import lottomail
 import pretix
@@ -43,15 +43,18 @@ def questionset(qs):
 @app.route('/api/transfer', methods=['POST'])
 @oidc.accept_token(require_token=True)
 def transfer_voucher():
+    u = get_or_create(Borderling, email=g.oidc_token_info['email'])
     if get_lottery().transferAllowed():
-        u = get_or_create(Borderling, email=g.oidc_token_info['email'])
         r = request.get_json()
         voucher = Voucher.query.filter(Voucher.code == r['voucher']).first()
         dest = Borderling.query.filter(Borderling.email == r['email']).first()
-        if voucher and to:
+        if voucher and dest:
             result = voucher.transfer(u, dest)
+            app.logger.warn("transfer {}".format(result))
             if result:
-                lottomail.voucher_transfer(dest, u, voucher.expires)
+                lottomail.voucher_transfer(dest.email, u.email, voucher.expires)
+        else:
+            app.logger.warn("transfer failed {} to {}".format(voucher, dest))
     return jsonify(u.to_dict(lottery))
 
 # Mark a voucher as gifted, will do the actual transfer once it's been paid in
@@ -63,7 +66,7 @@ def gift_voucher():
     r = request.get_json()
     voucher = Voucher.query.filter(Voucher.code == r['voucher']).first()
     dest = Borderling.query.filter(Borderling.email == r['email']).first()
-    if voucher and to:
+    if voucher and dest:
         voucher.gift_to(u, dest)
     return jsonify(u.to_dict(lottery))
 
@@ -92,6 +95,7 @@ def pretix_webhook():
         # TODO update download link
         if not voucher.order:
             voucher.order = d['code'] # update order info
+            voucher.secret = d['secret']
             if voucher.gifted_to:
                 sender = Borderling.query.filter(Borderling.id == Voucher.borderling_id).first()
                 recipient = Borderling.query.filter(Borderling.id == Voucher.gifted_to).first()

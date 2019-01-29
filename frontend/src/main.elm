@@ -19,9 +19,11 @@ import Debug
 --
 
 port renderButtons : () -> Cmd msg
+port kcToken : (String -> msg) -> Sub msg
 
 --
 
+type alias Token = String
 type QuestionType
     = Text
     | Date
@@ -62,7 +64,7 @@ type alias Voucher
 
 type alias Ticket
     = { order: String
-      , download_url: Maybe String }
+      , url: String }
 
 type alias Registration
     = { registered : Bool
@@ -79,7 +81,9 @@ type alias Model
       , lottery: Lottery
       , registration: Maybe Registration
       , transfer_to : String
-      , token: String }
+      , token: String
+      , error: Maybe String
+      , loading: Int }
 
 type alias HttpResource t
     = Result Http.Error t
@@ -106,6 +110,7 @@ type Msg
   | TransferInvite Voucher
   | GiftTicket Voucher
   | RenderButtons
+  | NewToken String
 
 --
 
@@ -131,7 +136,10 @@ init flags url key
             Nothing
             ""
             flags
-      , Cmd.batch [ getLottery flags , getRegistration flags ] )
+            Nothing
+            0
+      , Cmd.batch [ getLottery flags
+                  , getRegistration flags ] )
 
 routeParser : UP.Parser (Route -> a) a
 routeParser =
@@ -141,8 +149,9 @@ routeParser =
         , UP.map RegisterPage (UP.s "register")
         ]
 
-subscriptions _ =
-  Sub.none
+subscriptions : Model -> Sub Msg
+subscriptions m =
+    kcToken NewToken
 
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
@@ -177,20 +186,20 @@ update msg model =
                       , questions = Dict.union model.questions <| Dict.fromList <| List.map (\q -> Tuple.pair q.id q) qs.questions
                   }
                 , Cmd.none )
-            Err e -> ( Debug.log (Debug.toString e) model, Cmd.none ) -- TODO error
+            Err e -> ( { model | error = Just <| decodeHttpError e }, Cmd.none )
 
     GotLottery result ->
         case result of
-            Ok l -> ( { model | lottery = Debug.log "lol" l }
+            Ok l -> ( { model | lottery = l }
                     , Cmd.batch (List.map
                                      (\q -> getQuestions model.token q)
                                      l.questions))
-            Err e -> (Debug.log ((Debug.toString e )) model, Cmd.none )
+            Err e -> ( { model | error = Just <| decodeHttpError e }, Cmd.none )
 
     GotRegistration result ->
         case result of
             Ok r -> ( { model | registration = Just r }, Cmd.none )
-            Err e -> (Debug.log ((Debug.toString e )) model, Cmd.none )
+            Err e -> ( { model | error = Just <| decodeHttpError e }, Cmd.none )
 
     PostAnswers qs last ->
         ( model
@@ -232,10 +241,31 @@ update msg model =
         ( model, Cmd.none )
     RenderButtons ->
         ( model, renderButtons () )
+    NewToken s ->
+        ( { model | token = s }, Cmd.none )
 
+decodeHttpError : Http.Error -> String
+decodeHttpError e =
+    case e of
+        Http.BadStatus s ->
+            "Error from backend: " ++ String.fromInt(s)
+        Http.BadBody s ->
+            "Error parsing request response: " ++ s
+        _ ->
+            "Error making request to server! I'm probably in a bad state, try reloading."
 
 mkTitle : String -> String
 mkTitle t = "Borderland 2019 - " ++ t
+
+viewTemplate : Model -> List (Html Msg) -> List (Html Msg)
+viewTemplate model content =
+    (case model.error of
+        Nothing ->
+            []
+        Just e ->
+            [ h1 [] [ text "Error!" ]
+            , text e])
+    ++ content
 
 view : Model -> Browser.Document Msg
 view model =
@@ -246,13 +276,13 @@ view model =
             , body =
                 case model.registration of
                     Just r ->
-                        viewHome model.lottery r
+                        viewTemplate model <| viewHome model.lottery r
                     Nothing ->
                         [] }
 
         Just RegisterPage -> { title =
                                    mkTitle "Registering"
-                             , body =
+                             , body = viewTemplate model <|
                                    [ div [] [ text "You're about to enter the wonderful world of registrering."]
                                    , a [ href "/questions/1" ] [ text "Aks me questions?" ] ] }
 
@@ -260,15 +290,18 @@ view model =
             { title =
                   mkTitle "Questions?" -- TODO
             , body =
-                [ viewQuestionPage model.questionSets model.questions int ] }
+                viewTemplate model <| [ viewQuestionPage model.questionSets model.questions int ] }
 
         Nothing -> { title = mkTitle "You're lost"
                    , body = [ text "You're in a maze of websites, all alike." ] }
 
 viewHome : Lottery -> Registration -> List (Html Msg)
 viewHome l r =
-    [ div [] [ h1 [] [ text "Borderland Registraton"]] ]
-    ++ [ viewRegistrationStatus r ]
+    [ div []
+          [ h1 [] [ text "Borderland Membership Lottery"]
+          ]
+    ]
+    ++ [ viewRegistrationStatus l r ]
     ++ [ Maybe.withDefault (text "") <| viewVoucherStatus l r ]
     ++ viewExtraVouchers l r
 
@@ -278,37 +311,40 @@ viewExtraVouchers l r =
         (_::[]) ->
             []
         (_::xs) ->
-            List.map (viewExtraVoucher l r) xs
+            if l.can_transfer then
+                List.map (viewExtraVoucher l r) xs
+            else
+                []
         _ ->
             []
 
 viewExtraVoucher : Lottery -> Registration -> Voucher -> Html Msg
 viewExtraVoucher l r v =
     div []
-        [ text "blah blah input field TODO"
-        , input [ type_ "email"
-                , placeholder "Registered email"
-                , onInput (TransferFieldInput)
-                ] []
-        , input [ type_ "button"
-                , value "Transfer invite"
-                , onClick (TransferInvite v)
-                ] []
-        , node "pretix-button"
-              [ attribute "event" l.pretixUrl
-              , attribute "items" l.ticketItem
-              , attribute "voucher" v.code
-              , attribute "data-email" r.email
-              , on "DOMNodeInserted" (JD.succeed RenderButtons)
-              , onClick (GiftTicket v)
-              ] [ text "Gift Ticket" ]
+        [ h2 [] [ text "You have an additional invitation "]
+        , text "Send it on or gift it to a friend. "
+        , text <| "It expires " ++ viewTime v.expires
+        , div [] [input [ type_ "email"
+                        , placeholder "Registered email"
+                        , onInput (TransferFieldInput)
+                        ] []
+                 , input [ type_ "button"
+                         , value "Transfer invite"
+                         , onClick (TransferInvite v)
+                         ] []
+                 , input [ type_ "button"
+                         , value "Gift membership"
+                         , onClick (GiftTicket v)
+                  ] []
+                 ]
         ]
 
 viewVoucherStatus : Lottery -> Registration -> Maybe (Html Msg)
 viewVoucherStatus l r =
     case r.tickets of
         Just t ->
-            Just (text "you have a ticket yay etc transfers pdf download etc")
+            Just (div [] [ h2 [] [text  "you have a ticket yay etc"]
+                         , text "blah blah link to your info here" ])
         Nothing ->
             case r.vouchers of
                 [] ->
@@ -320,9 +356,38 @@ viewPersonalVoucher : Lottery -> Registration -> Maybe (Html Msg)
 viewPersonalVoucher l r =
     head r.vouchers
         |> Maybe.andThen (\v -> Just <|
-                              div [] [ text "you have a voucher!"
-                                     ,  text <| "Expiration epoch : " ++ String.fromInt ((Time.posixToMillis v.expires)) -- TODO
+                              div [] [ h2 [] [ text "You have an invitation!" ]
+                                     ,  text <| "It expires " ++ viewTime v.expires
                                      , viewPretixButton l r v.code l.ticketItem ])
+
+viewTime : Time.Posix -> String
+viewTime t =
+    let
+        hour = String.padLeft 2 '0' <| String.fromInt(Time.toHour Time.utc t)
+        min = String.padLeft 2 '0' <| String.fromInt(Time.toMinute Time.utc t)
+        sec = String.padLeft 2 '0' <| String.fromInt(Time.toSecond Time.utc t)
+        day = String.fromInt(Time.toDay Time.utc t)
+        mon = stringFromMonth(Time.toMonth Time.utc t)
+        yr = String.fromInt(Time.toYear Time.utc t)
+    in
+        day ++ "-" ++ mon ++ "-" ++ yr ++ " " ++ hour ++ ":" ++ min ++ ":" ++ sec ++ " UTC"
+
+stringFromMonth : Time.Month -> String
+stringFromMonth month =
+  case month of
+    Time.Jan -> "Jan"
+    Time.Feb -> "Feb"
+    Time.Mar -> "Mar"
+    Time.Apr -> "Apr"
+    Time.May -> "May"
+    Time.Jun -> "Jun"
+    Time.Jul -> "Jul"
+    Time.Aug -> "Aug"
+    Time.Sep -> "Sep"
+    Time.Oct -> "Oct"
+    Time.Nov -> "Nov"
+    Time.Dec -> "Dec"
+
 
 viewPretixButton : Lottery -> Registration -> String -> String -> Html Msg
 viewPretixButton l r code item =
@@ -334,17 +399,23 @@ viewPretixButton l r code item =
         , on "DOMNodeInserted" (JD.succeed RenderButtons)
         ] [ text "Purchase membership" ]
 
-viewRegistrationStatus : Registration -> Html Msg
-viewRegistrationStatus r =
-    if r.registered then -- TODO and can register
-        div [] [
-            text "You're registered!"
-            , a [ href "/register" ] [ text "Change your answers."] ]
+viewRegistrationStatus : Lottery -> Registration -> Html Msg
+viewRegistrationStatus l r =
+    if r.registered then
+        div [] <| [ text "You're registered!"
+               ]
+            ++ if l.can_register then
+                   [ a [ href "/register" ] [ text "Change your answers."] ]
+               else
+                   []
     else
-        div []
-            [ text "Click here to register for Borderland 2019: "
-            , a [ href "/register" ] [ text "Register"]
-            ]
+        if l.can_register then
+          div []
+              [ text "Click here to register for Borderland 2019: "
+              , a [ href "/register" ] [ text "Register"]
+              ]
+        else
+            div [] [ text "Alas, registration is not open :(" ]
 
 viewQuestionPage : List QuestionSet -> Dict Int Question -> Int -> Html Msg
 viewQuestionPage questionSets questions i =
@@ -477,7 +548,7 @@ postTransferInvite v m
                            ("voucher", Json.Encode.string v.code),
                            ("email", Json.Encode.string m.transfer_to)
                           ]))
-            m.token "/api/transfer" (Http.expectWhatever Posted) -- TODO update registration
+            m.token "/api/transfer" (Http.expectJson GotRegistration registrationDecoder)
 
 postGiftTicket : Voucher -> Model -> Cmd Msg
 postGiftTicket v m
@@ -493,7 +564,6 @@ getLottery : String -> Cmd Msg
 getLottery token =
     authorizedGet token "/api/lottery" (Http.expectJson GotLottery lotteryDecoder)
 
-type alias Token = String
 authorizedReq : String -> Http.Body -> Token -> String -> Http.Expect Msg -> Cmd Msg
 authorizedReq method body token url expect =
     Http.request
@@ -568,7 +638,7 @@ voucherDecoder = JD.map2 Voucher
 ticketDecoder : JD.Decoder (Maybe Ticket)
 ticketDecoder = JD.maybe <| JD.map2 Ticket
                     (JD.at ["order"] JD.string)
-                    (JD.maybe <| JD.at ["pdf_url"] JD.string )
+                    (JD.at ["url"] JD.string)
 
 registrationDecoder : JD.Decoder Registration
 registrationDecoder = JD.map4 Registration

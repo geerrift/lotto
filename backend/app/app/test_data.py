@@ -1,7 +1,28 @@
-from app import db
+from main import *
+from datetime import timezone, timedelta
+
+event = "test3"
+item = 5
+child_item = 6
+
 
 def db_test_data():
-    lottery = get_lottery()
+    tz = timezone(offset=timedelta(hours = 1))
+    lottery = Lottery(
+                         registration_start = datetime(2019,1,30,8,0,tzinfo=tz),
+                         registration_end = datetime(2019,1,30,20,0,tzinfo=tz),
+                         lottery_start = datetime(2019,1,30,17,10,tzinfo=tz),
+                         lottery_end = datetime(2019,1,30,20,50,tzinfo=tz),
+                         transfer_start = datetime(2019,1,30,17,0,tzinfo=tz),
+                         transfer_end = datetime(2019,1,30,20,50,tzinfo=tz),
+                         fcfs_voucher = "fcfs",
+                         child_voucher = "child",
+                         child_item = child_item,
+                         ticket_item = item,
+                         pretix_event_url = "https://pretix.theborderland.se/borderland/{}/".format(event))
+    db.session.add(lottery)
+
+
     db.session.commit()
     personal_qs = Questionset(lottery_id = lottery.id, priority=10, name="Personal questions",description='''To make the lottery fair we need to check your ID when you arrive at the port. Please fill out the following like it appears on an official document.
 
