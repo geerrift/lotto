@@ -66,9 +66,11 @@ def gift_voucher():
     r = request.get_json()
     voucher = Voucher.query.filter(Voucher.code == r['voucher']).first()
     dest = Borderling.query.filter(Borderling.email == r['email']).first()
-    if voucher and dest:
-        voucher.gift_to(u, dest)
-    return jsonify(u.to_dict(lottery))
+    if voucher and dest and voucher.gift_to(u, dest):
+        return jsonify({"result": True,
+                        "url": "https://{}/{}/{}/redeem?voucher={}".format(host,org,event,voucher.code)
+        }), 201
+    return jsonify({"result": False}), 401
 
 @app.route('/')
 def route_root():

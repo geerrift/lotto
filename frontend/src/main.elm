@@ -20,6 +20,7 @@ import Debug
 
 port renderButtons : () -> Cmd msg
 port kcToken : (String -> msg) -> Sub msg
+port openWindow : String -> Cmd msg
 
 --
 
@@ -111,6 +112,7 @@ type Msg
   | GiftTicket Voucher
   | RenderButtons
   | NewToken String
+  | TicketGifted (HttpResource String)
 
 --
 
@@ -129,7 +131,7 @@ init flags url key
     = ( Model
             key
             url
-            (UP.parse routeParser url) -- FIXME
+            (UP.parse routeParser url)
             []
             Dict.empty
             (Lottery False False "" "" "" [])
@@ -137,7 +139,7 @@ init flags url key
             ""
             flags
             Nothing
-            0
+            2
       , Cmd.batch [ getLottery flags
                   , getRegistration flags ] )
 
@@ -170,13 +172,13 @@ update msg model =
       , Cmd.none )
 
     GetQuestions i ->
-        ( model, getQuestions model.token i ) -- TODO loading
+        ( { model | loading = model.loading + 1 }, getQuestions model.token i )
 
     GetLottery ->
-        ( model, getLottery model.token )
+        ( { model | loading = model.loading + 1 }, getLottery model.token )
 
     GetRegistration ->
-        ( model, getRegistration model.token )
+        ( { model | loading = model.loading + 1 }, getRegistration model.token )
 
     GotQuestionSet result ->
         case result of
@@ -184,25 +186,35 @@ update msg model =
                   ( { model -- TODO maybe not keep adding forever, make immutable
                       | questionSets = (List.sortBy .priority (qs :: model.questionSets))
                       , questions = Dict.union model.questions <| Dict.fromList <| List.map (\q -> Tuple.pair q.id q) qs.questions
+                      , loading = model.loading - 1
                   }
                 , Cmd.none )
-            Err e -> ( { model | error = Just <| decodeHttpError e }, Cmd.none )
+            Err e -> ( { model | error = Just <| decodeHttpError e
+                               , loading = model.loading - 1
+                       }, Cmd.none )
 
     GotLottery result ->
         case result of
-            Ok l -> ( { model | lottery = l }
+            Ok l -> ( { model | lottery = l
+                              , loading = model.loading - 1 + (List.length l.questions) }
                     , Cmd.batch (List.map
                                      (\q -> getQuestions model.token q)
                                      l.questions))
-            Err e -> ( { model | error = Just <| decodeHttpError e }, Cmd.none )
+            Err e -> ( { model | error = Just <| decodeHttpError e
+                               , loading = model.loading - 1 },
+                           Cmd.none )
 
     GotRegistration result ->
         case result of
-            Ok r -> ( { model | registration = Just r }, Cmd.none )
-            Err e -> ( { model | error = Just <| decodeHttpError e }, Cmd.none )
+            Ok r -> ( { model | registration = Just r
+                              , loading = model.loading - 1 }
+                    , Cmd.none )
+            Err e -> ( { model | error = Just <| decodeHttpError e
+                               , loading = model.loading - 1 }
+                     , Cmd.none )
 
     PostAnswers qs last ->
-        ( model
+        ( { model | loading = model.loading + if last then 2 else 1 }
         , Cmd.batch
             ([ postAnswers model qs ] ++
                  if last then
@@ -218,6 +230,7 @@ update msg model =
                          Nothing -> Nothing)
                 model.questions }
         , Cmd.none )
+
     ToggleCheckbox question option v ->
         let
             newQuestion = { question | selections =
@@ -231,18 +244,36 @@ update msg model =
         ( { model | questions =
                 Dict.insert question.id newQuestion model.questions }
         , Cmd.none )
+
     TransferFieldInput s ->
         ( { model | transfer_to = s }, Cmd.none )
+
     TransferInvite v ->
-        ( model, postTransferInvite v model )
+        ( { model | loading = model.loading + 1 }
+        , postTransferInvite v model )
+
     GiftTicket v ->
-        ( model, postGiftTicket v model )
+        ( { model | loading = model.loading + 1 }
+        , postGiftTicket v model )
+
     Posted _ ->
-        ( model, Cmd.none )
+        ( { model | loading = model.loading - 1 }
+        , Cmd.none )
+
     RenderButtons ->
         ( model, renderButtons () )
+
     NewToken s ->
         ( { model | token = s }, Cmd.none )
+
+    TicketGifted (Ok s) ->
+        ( { model | loading = model.loading - 1 }
+        , openWindow s )
+
+    TicketGifted (Err e) ->
+        ( { model | error = Just "Unable to gift ticket"
+                  , loading = model.loading - 1 }
+        , Cmd.none )
 
 decodeHttpError : Http.Error -> String
 decodeHttpError e =
@@ -264,7 +295,8 @@ viewTemplate model content =
             []
         Just e ->
             [ h1 [] [ text "Error!" ]
-            , text e])
+            , text e ])
+    ++ [ div [] <| if model.loading > 0 then [ text <| "loading " ++ String.fromInt(model.loading) ] else [ ] ]
     ++ content
 
 view : Model -> Browser.Document Msg
@@ -442,8 +474,6 @@ viewQuestionSet qset qs = div [] [ h1 [] [ text qset.name ]
                                  , text qset.description
                                  , viewQuestions <| questionsForSet qset qs
                                  ]
--- TODO more info
-
 viewQuestions : List Question -> Html Msg
 viewQuestions qs = div []
                         (List.map (viewQuestion) qs)
@@ -557,8 +587,7 @@ postGiftTicket v m
                            ("voucher", Json.Encode.string v.code),
                            ("email", Json.Encode.string m.transfer_to)
                           ]))
-          m.token "/api/gift" (Http.expectWhatever Posted) -- TODO update registration
-
+          m.token "/api/gift" (Http.expectJson TicketGifted (JD.at ["url"] JD.string))
 
 getLottery : String -> Cmd Msg
 getLottery token =

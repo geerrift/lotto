@@ -1,19 +1,12 @@
-lower expiration
-drop db
-new times
-
 
 Gifting tickets is broken and needs a rethinking
   - Open pretix differently
   - Wait for server response
 
-# Frontend: Loading indicator
 
 --- tricky ---
 
-
 3. Update order name
-
 
 --- design things that affect implementation ---
 
@@ -27,7 +20,7 @@ There's no indication if you've gotten a special invite, e.g. an Under 13 invite
 or FCFS.
 
 
--- ---
+---
 
 * pretix cronjob
 * membership cronjob
@@ -35,12 +28,11 @@ or FCFS.
 pretty email text
 pretty HTML emails
 
--- --
+---
 
 Data protection contact info
 
 Safari polyfill
-
 
 
 # Frontend: pre-login front page

@@ -268,7 +268,7 @@ class Voucher(db.Model):
             return False
         if Voucher.query.filter(Voucher.borderling_id == target.id, Voucher.order.any()):
             app.logger.warn("gift_to: {} tried to gift ticket to {} who already has one".format(origin, target))
-            # TODO return errors
+            # TODO return error text
             return False
         self.gifted_to = target.id
         db.session.commit()
