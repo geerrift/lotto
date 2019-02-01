@@ -7,56 +7,58 @@
         <link rel="stylesheet" type="text/css" href="https://pretix.theborderland.se/borderland/test/widget/v1.css"> <!-- FIXME -->
         <script src="https://account.theborderland.se/auth/js/keycloak.min.js"></script>
         <script src="/static/main.js"></script>
-        <script src="/static/nodep-date-input-polyfill.dist.js"></script>
+        <script type="module" src="/static/date-input-polyfill.dist.js" async></script>
+        <script src="/static/datalist-polyfill.min.js" async></script>
         <script type="text/javascript" src="https://pretix.theborderland.se/widget/v1.en.js" async></script>
     </head>
-    <script>
-     const keycloak = Keycloak('/static/keycloak.json');
-     var app;
-     keycloak.onAuthSuccess = function () {
-         app = Elm.Main.init({
-             flags: keycloak.token
-         });
-         app.ports.renderButtons.subscribe(function() {
-             window.PretixWidget.buildWidgets();
-         });
-         setInterval(function () {
-             keycloak.updateToken(60).success(function(t) {
-                 if (t) {
-                     app.ports.kcToken.send(keycloak.token);
-                 } else {
-                     console.log('Token not refreshed, valid for ' + Math.round(keycloak.tokenParsed.exp + keycloak.timeSkew - new Date().getTime() / 1000) + ' seconds');
-                 };
-             }).error(function(e) {
-                 alert("Logged out of borderland account!");
-             });
-         }, 10000);
-     };
+    <body>
+        <script>
+            const keycloak = Keycloak('/static/keycloak.json');
+            var app;
+            keycloak.onAuthSuccess = function () {
+                app = Elm.Main.init({
+                    flags: keycloak.token
+                });
+                app.ports.renderButtons.subscribe(function() {
+                    window.PretixWidget.buildWidgets();
+                });
+                setInterval(function () {
+                    keycloak.updateToken(60).success(function(t) {
+                        if (t) {
+                            app.ports.kcToken.send(keycloak.token);
+                        } else {
+                            console.log('Token not refreshed, valid for ' + Math.round(keycloak.tokenParsed.exp + keycloak.timeSkew - new Date().getTime() / 1000) + ' seconds');
+                        };
+                    }).error(function(e) {
+                        alert("Logged out of borderland account!");
+                    });
+                }, 10000);
+            };
 
-     keycloak.onAuthError = function (errorData) {
-         console.log("Auth Error: " + JSON.stringify(errorData) );
-     };
+            keycloak.onAuthError = function (errorData) {
+                console.log("Auth Error: " + JSON.stringify(errorData) );
+            };
 
-     keycloak.onAuthRefreshSuccess = function () {
-         console.log('Auth Refresh Success');
-     };
+            keycloak.onAuthRefreshSuccess = function () {
+                console.log('Auth Refresh Success');
+            };
 
-     keycloak.onAuthRefreshError = function () {
-         console.log('Auth Refresh Error');
-     };
+            keycloak.onAuthRefreshError = function () {
+                console.log('Auth Refresh Error');
+            };
 
-     keycloak.onAuthLogout = function () {
-         console.log('Auth Logout');
-     };
+            keycloak.onAuthLogout = function () {
+                console.log('Auth Logout');
+            };
 
-     keycloak.onTokenExpired = function () {
-         console.log('Access token expired.');
-     };
+            keycloak.onTokenExpired = function () {
+                console.log('Access token expired.');
+            };
 
-     keycloak.init({ onLoad: 'login-required',
-                     checkLoginIframe: false // breaks updateToken, hook elm
-                                             // somewhere else probably
-     });
-    </script>
+            keycloak.init({ onLoad: 'login-required',
+                            checkLoginIframe: false // breaks updateToken, hook elm
+                                                    // somewhere else probably
+            });
+        </script>
     </body>
 </html>

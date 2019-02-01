@@ -77,41 +77,39 @@ def route_root():
     index_path = os.path.join(app.static_folder, 'index.html')
     return send_file(index_path)
 
-# Call this periodically
-@app.route('/_/cron')
-def periodic():
-    do_lottery()
-    return "k"
-
 # Called by Pretix when an order has been paid, so we can do gifting and update the status.
+# Here be dragons: a lot of this belongs in the model
 @app.route('/_/webhooks/pretix', methods=['POST'])
 def pretix_webhook():
     d = request.get_json()
     if d['action'] == "pretix.event.order.paid":
         #{"notification_id": 117, "organizer": "borderland", "event": "test", "code": "Z9M9V", "action": "pretix.event.order.paid"}
-        orderposition = pretix.order_info(d['code'])['positions'][0] # TODO assumes only one product, this assumption is prevalent
+        orderinfo = pretix.order_info(d['code'])
+        orderposition = orderinfo['positions'][0] # TODO assumes only one product, this assumption is prevalent
         pretix_voucher = pretix.voucher_info(orderposition['voucher'])
         app.logger.info("Webhook order.paid: {} for {}".format(d['code'], pretix_voucher))
         voucher = Voucher.query.filter(Voucher.code == pretix_voucher['code']).first()
-        borderling = Borderling.query.filter(Borderling.id == Voucher.borderling_id).first()
-        # TODO update download link
-        if not voucher.order:
-            voucher.order = d['code'] # update order info
-            voucher.secret = d['secret']
+        borderling = Borderling.query.filter(Borderling.id == voucher.borderling_id).first()
+        if voucher and not voucher.order:
+            # update order info
+            voucher.order = d['code']
+            voucher.secret = orderinfo['secret']
             if voucher.gifted_to:
-                sender = Borderling.query.filter(Borderling.id == Voucher.borderling_id).first()
                 recipient = Borderling.query.filter(Borderling.id == Voucher.gifted_to).first()
-                if Voucher.query.filter(Voucher.borderling_id == target.id, ~Voucher.order.any()):
-                    app.logger.info("Webhook: transfering gifted voucher from {} to {}".format(sender, recipient))
-                    voucher.transfer(sender, recipient)
-                    lottomail.gifted_ticket(recipient, sender)
+                if Voucher.query.filter(Voucher.borderling_id == recipient.id, Voucher.order != None):
+                    app.logger.info("Webhook: transfering gifted voucher from {} to {}".format(borderling, recipient))
+                    if voucher.transfer(borderling, recipient):
+                        lottomail.gifted_ticket(recipient.email, borderling.email)
+                        pretix.update_order_name(d['code'], borderling.pretix_name())
                 else:
-                    app.logger.error("Webhook: Order {} gifted to {} who already has ticket".format(d['code'], target))
+                    app.logger.error("Webhook: Order {} gifted to {} who already has ticket".format(d['code'], recipient))
+                    raise ValueError("Refund? Limbo ticket! {}".format(d['code'])) # TODO this is a human race condition, hard to solve
+                    #lottomail.alert.. something
             else:
                 app.logger.info("Webhook: purchase completed for {}".format(borderling))
                 lottomail.order_complete(borderling.email)
+                pretix.update_order_name(d['code'], borderling.pretix_name())
         db.session.commit()
-        pretix.update_order_name(d['code'], borderling.pretix_name())
     return "k"
 
 

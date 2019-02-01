@@ -1,53 +1,38 @@
 
-Gifting tickets is broken and needs a rethinking
-  - Open pretix differently
-  - Wait for server response
-
-
 --- tricky ---
 
 3. Update order name
 
---- design things that affect implementation ---
-
-Tooltips for volunteer questions
-
-Instructive placeholders text where appropriate
-
 Enter key does not function in any of the forms
 
 There's no indication if you've gotten a special invite, e.g. an Under 13 invite
-or FCFS.
+or FCFS. DONE backend
 
 
----
+--- 
 
 * pretix cronjob
 * membership cronjob
 
 pretty email text
-pretty HTML emails
 
----
+-- 
 
-Data protection contact info
+Documentation
+Support, data protection contact info
+        
+-- maybe
 
-Safari polyfill
+You can progress without giving input
+Safari polyfill for date
 
+-- soon after reg
 
-# Frontend: pre-login front page
-# ping elb then test database
+- IAM dreams integration
 
+-- stretch goals
+
+- Frontend: pre-login front page
 - frontend: modules
-Documentation:
-  after refactor
-  backend
-  frontend
-
-IAM dreams integration
-
-
-# question ordering
-# backend: store IP address? account creation fraud thing
-
-
+- backend: create log table, store ip, requests etc
+- stretch goal: pretty HTML emails

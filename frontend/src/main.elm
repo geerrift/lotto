@@ -20,7 +20,6 @@ import Debug
 
 port renderButtons : () -> Cmd msg
 port kcToken : (String -> msg) -> Sub msg
-port openWindow : String -> Cmd msg
 
 --
 
@@ -268,7 +267,7 @@ update msg model =
 
     TicketGifted (Ok s) ->
         ( { model | loading = model.loading - 1 }
-        , openWindow s )
+        , Nav.load s )
 
     TicketGifted (Err e) ->
         ( { model | error = Just "Unable to gift ticket"
@@ -343,10 +342,7 @@ viewExtraVouchers l r =
         (_::[]) ->
             []
         (_::xs) ->
-            if l.can_transfer then
-                List.map (viewExtraVoucher l r) xs
-            else
-                []
+            List.map (viewExtraVoucher l r) xs
         _ ->
             []
 

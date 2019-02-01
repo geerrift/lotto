@@ -37,12 +37,12 @@ class Lottery(db.Model):
     child_item = db.Column(db.Integer)
     ticket_item = db.Column(db.Integer)
     pretix_event_url = db.Column(db.String(500))
+    message = db.Column(db.String(5000))
 
     def __repr__(self):
         return '<Lottery %r>' % self.id
 
     def transferAllowed(self):
-        return True #FIXME
         return self.transfer_start < datetime.utcnow() and self.transfer_end > datetime.utcnow()
 
     def lotteryRunning(self):
@@ -53,7 +53,7 @@ class Lottery(db.Model):
                 self.registration_end > datetime.utcnow()) and not self.lotteryRunning()
 
     def isFCFS(self):
-        return self.lottery_end < datetime.utcnow()
+        return self.fcfs_voucher and self.lottery_end < datetime.utcnow()
 
     def get_random_borderling(self):
         return Borderling.query.filter(Borderling.lottery_id == self.id,
@@ -64,8 +64,10 @@ class Lottery(db.Model):
         return { "can_register": self.registrationAllowed(),
                  "can_transfer": self.transferAllowed(),
                  "child_item": "item_{}=1".format(self.child_item),
+                 "fcfs_voucher": self.isFCFS() and self.fcfs_voucher,
                  "ticket_item": "item_{}=1".format(self.ticket_item),
                  "pretix_event_url": self.pretix_event_url,
+                 "message": self.message,
                  "questions": [ qs.id for qs in self.questionsets ]}
 
 class Borderling(db.Model):
@@ -95,24 +97,24 @@ class Borderling(db.Model):
     def getVouchers(self):
         lottery_ = get_lottery()
 #        vouchers = [ v.to_dict() for v in self.vouchers ]
-        vouchers = [ v.to_dict() for v in Voucher.query.filter(Voucher.borderling_id == self.id, Voucher.expires > datetime.utcnow()).order_by(Voucher.primary.desc(),Voucher.id.desc()).all() ]
-        if vouchers:
-            return vouchers
-        else:
-            if self.isChild() and (lottery_.lotteryRunning() or lottery_.isFCFS()):
-                return [ { "code": lottery_.child_voucher,
-                        "expires": lottery_.transfer_end.isoformat()+"+01:00" # TODO timezones
-                } ]
-            elif lottery_.isFCFS():
-                return [ { "code": lottery_.fcfs_voucher, "expires": lottery_.transfer_end.isoformat()+"+01:00" } ]
-            else:
-                return []
+        return [ v.to_dict() for v in Voucher.query.filter(Voucher.borderling_id == self.id, Voucher.expires > datetime.utcnow()).order_by(Voucher.order, Voucher.primary.desc(),Voucher.id.desc()).all() ]
+#        if vouchers:
+#            return vouchers
+#        else:
+#            if self.isChild() and (lottery_.lotteryRunning() or lottery_.isFCFS()):
+#                return [ { "code": lottery_.child_voucher,
+#                        "expires": lottery_.transfer_end.isoformat()+"+01:00" # TODO timezones
+#                } ]
+#            elif lottery_.isFCFS():
+#                return [ { "code": lottery_.fcfs_voucher, "expires": lottery_.transfer_end.isoformat()+"+01:00" } ]
+#            else:
+#                return []
 
     def isRegistered(self, lottery):
         return self in get_lottery().borderlings
 
     def pretix_name(self):
-        return "" # TODO
+        return "" # TODO realname and DOB
 
     def to_dict(self, lottery):
         tickets = Voucher.query.filter(Voucher.borderling_id == self.id,
@@ -120,6 +122,7 @@ class Borderling(db.Model):
         return { "registered": self.isRegistered(lottery),
                  "tickets": tickets and tickets.ticket_dict(),
                  "email": self.email,
+                 "child_voucher": self.isChild() and lottery.child_voucher,
                  "vouchers": self.getVouchers() }
 
 class Answer(db.Model):
@@ -136,6 +139,7 @@ class Question(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     set_id = db.Column(db.Integer, db.ForeignKey("questionset.id"))
     text = db.Column(db.String(5000), unique=False, nullable=True)
+    tooltip = db.Column(db.String(5000), unique=False, nullable=True)
     type = db.Column(db.String(100), unique=False, nullable=True)
     answer_id = db.Column(db.Integer, db.ForeignKey("answer.id"))
     options = db.relationship('QuestionOption', backref='Question', lazy = True)
@@ -187,6 +191,7 @@ class Question(db.Model):
                    self.get_answer(borderling))
                  or "",
                  "type": self.type,
+                 "tooltip": self.tooltip,
                  "selections": (borderling and self.get_selections(borderling)) or []}
 
 class QuestionOption(db.Model):
@@ -230,9 +235,8 @@ class Voucher(db.Model):
         return '<Voucher: %r>' % self.code
 
     def ticket_dict(self):
-        # TODO pdf_url
         return { "order": self.order
-                 , "url": "https://{}/{}/{}/order/{}/{}".format(host,org,event,self.code,self.secret) }
+                 , "url": "https://{}/{}/{}/order/{}/{}".format(host,org,event,self.order,self.secret) }
 
     def to_dict(self):
         return { "code": self.code, "expires": self.expires.isoformat()+"+01:00",
@@ -252,9 +256,9 @@ class Voucher(db.Model):
         if self.primary:
             app.logger.error("Attempt to transfer primary voucher: {}".format(self))
             return False
-        if target.vouchers:
-            app.logger.error("Attempt to transfer but target already has vouchers: {}".format(self))
-            return False
+        if target.voucher and target.vouchers[0].order:
+                app.logger.error("Attempt to transfer but target already has paid vouchers: {}".format(self))
+                return False
         self.primary = True
         self.borderling_id = target.id
         self.gifted_to = None
@@ -266,7 +270,7 @@ class Voucher(db.Model):
         if origin.id != self.borderling_id and not self.order:
             app.logger.warn("gift_to: {} tried to gift ticket to {}, but voucher is either not paid for, or is not owned by source".format(origin, target))
             return False
-        if Voucher.query.filter(Voucher.borderling_id == target.id, Voucher.order.any()):
+        if Voucher.query.filter(Voucher.borderling_id == target.id, Voucher.order != None).first():
             app.logger.warn("gift_to: {} tried to gift ticket to {} who already has one".format(origin, target))
             # TODO return error text
             return False

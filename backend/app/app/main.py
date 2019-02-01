@@ -65,7 +65,7 @@ app.config.update({
 host = "pretix.theborderland.se"
 org = "borderland"
 event = "test3"
-expiration_delta = { "hours": 2 }
+expiration_delta = { "days": 2 }
 item = 5
 child_item = 6
 
