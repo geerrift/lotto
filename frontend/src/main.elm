@@ -295,7 +295,10 @@ viewTemplate model content =
         Just e ->
             [ h1 [] [ text "Error!" ]
             , text e ])
-    ++ [ div [] <| if model.loading > 0 then [ text <| "loading " ++ String.fromInt(model.loading) ] else [ ] ]
+    ++ [ div [ id "loading"
+             , class <| if (model.loading > 0) then "visible" else "hidden"
+             ] []
+       ]
     ++ content
 
 view : Model -> Browser.Document Msg

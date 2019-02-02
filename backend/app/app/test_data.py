@@ -10,7 +10,7 @@ def db_test_data():
     tz = timezone(offset=timedelta(hours = 1))
     lottery = Lottery(
                          registration_start = datetime(2019,2,1,8,0,tzinfo=tz),
-                         registration_end = datetime(2019,2,1,23,0,tzinfo=tz),
+                         registration_end = datetime(2019,2,28,23,0,tzinfo=tz),
                          lottery_start = datetime(2019,2,1,20,0,tzinfo=tz),
                          lottery_end = datetime(2019,2,1,20,50,tzinfo=tz),
                          transfer_start = datetime(2019,1,29,17,0,tzinfo=tz),
