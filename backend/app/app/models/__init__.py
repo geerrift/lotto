@@ -189,6 +189,7 @@ class Question(db.Model):
                  "options": [ o.to_dict() for o in self.options ],
                  "answer": (borderling and
                    self.get_answer(borderling))
+                 or (self.tag == "children" and "0") # hacken, mixen, pulverizen
                  or "",
                  "type": self.type,
                  "tooltip": self.tooltip,
@@ -199,6 +200,7 @@ class QuestionOption(db.Model):
     question_id = db.Column(db.Integer, db.ForeignKey("question.id"))
     priority = db.Column(db.Integer)
     text = db.Column(db.String(1000), unique=False)
+    tooltip = db.Column(db.String(5000), unique=False, nullable=True)
 
     def to_dict(self):
         return { "id": self.id,
@@ -256,9 +258,12 @@ class Voucher(db.Model):
         if self.primary:
             app.logger.error("Attempt to transfer primary voucher: {}".format(self))
             return False
-        if target.voucher and target.vouchers[0].order:
+        if target.vouchers and target.vouchers[0].order:
                 app.logger.error("Attempt to transfer but target already has paid vouchers: {}".format(self))
                 return False
+        if target.vouchers and target.vouchers[0].expires > datetime.utcnow():
+            app.logger.error("Attempt to transfer but target already has valid voucher: {}".format(self))
+            return False
         self.primary = True
         self.borderling_id = target.id
         self.gifted_to = None

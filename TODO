@@ -1,20 +1,21 @@
 
+backend: return success on posting questions, validate questions
+frontend: only move forward on PostQuestions success
+
+double check the freaking time zone stuff for expiration!
+
+
+error box
+
+
+
+Transfer bought tickets missing (blocked in backend, not visible in UI)
+   - post lottery
+
+Modal before transfering invite or gifting ticket to make sure user understands the difference
 --- tricky ---
 
 3. Update order name
-
-Enter key does not function in any of the forms
-
-There's no indication if you've gotten a special invite, e.g. an Under 13 invite
-or FCFS. DONE backend
-
-
---- 
-
-* pretix cronjob
-* membership cronjob
-
-pretty email text
 
 -- 
 

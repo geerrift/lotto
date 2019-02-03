@@ -33,7 +33,9 @@ type QuestionType
 
 type alias Option
     = { id : Int
-      , text : String }
+      , text : String
+      , tooltip: Maybe String
+      }
 
 type alias Question
     = { id : Int
@@ -41,6 +43,7 @@ type alias Question
       , answer : String
       , selections : Set Int
       , type_ : QuestionType
+      , tooltip : Maybe String
       , options: List Option }
 
 type alias QuestionSet
@@ -53,9 +56,10 @@ type alias QuestionSet
 type alias Lottery
     = { can_register : Bool
       , can_transfer : Bool
-      , childItem : String
+      , fcfsVoucher : Maybe String
       , ticketItem : String
       , pretixUrl : String
+      , message: Maybe String
       , questions : List Int }
 
 type alias Voucher
@@ -103,7 +107,7 @@ type Msg
   | GotLottery (HttpResource Lottery)
   | GotRegistration (HttpResource Registration)
   | UpdateAnswer Int String
-  | PostAnswers QuestionSet Bool
+  | PostAnswers QuestionSet Bool String
   | Posted (HttpResource ())
   | ToggleCheckbox Question Option Bool
   | TransferFieldInput String
@@ -112,6 +116,7 @@ type Msg
   | RenderButtons
   | NewToken String
   | TicketGifted (HttpResource String)
+  | PostedAnswers String (HttpResource Bool)
 
 --
 
@@ -133,7 +138,7 @@ init flags url key
             (UP.parse routeParser url)
             []
             Dict.empty
-            (Lottery False False "" "" "" [])
+            (Lottery False False Nothing "" "" Nothing [])
             Nothing
             ""
             flags
@@ -212,10 +217,10 @@ update msg model =
                                , loading = model.loading - 1 }
                      , Cmd.none )
 
-    PostAnswers qs last ->
+    PostAnswers qs last next ->
         ( { model | loading = model.loading + if last then 2 else 1 }
         , Cmd.batch
-            ([ postAnswers model qs ] ++
+            ([ postAnswers model qs next ] ++
                  if last then
                      [ postRegistration model.token ]
                  else
@@ -274,6 +279,13 @@ update msg model =
                   , loading = model.loading - 1 }
         , Cmd.none )
 
+    PostedAnswers next m ->
+        case m of
+            Ok s ->
+               ( model, Nav.pushUrl model.key next )
+            Err s ->
+                ( { model | error = Just "Unable to send answer " }, Cmd.none )
+
 decodeHttpError : Http.Error -> String
 decodeHttpError e =
     case e of
@@ -285,7 +297,7 @@ decodeHttpError e =
             "Error making request to server! I'm probably in a bad state, try reloading."
 
 mkTitle : String -> String
-mkTitle t = "Borderland 2019 - " ++ t
+mkTitle t = "Borderland 2019 Membership - " ++ t
 
 viewTemplate : Model -> List (Html Msg) -> List (Html Msg)
 viewTemplate model content =
@@ -293,49 +305,81 @@ viewTemplate model content =
         Nothing ->
             []
         Just e ->
-            [ h1 [] [ text "Error!" ]
-            , text e ])
+            [ div [ class "alert alert-danger" ]
+                  [ text <| "Error! " ++ e ]
+            ])
     ++ [ div [ id "loading"
              , class <| if (model.loading > 0) then "visible" else "hidden"
              ] []
        ]
-    ++ content
+    ++ [ div [ class "outer_container" ]
+             [ div [ class "container"]
+                   [ div [ class "row" ]
+                         [ div [ class "col-6", class "col-md-4" ]
+                               <| [ div [ class "logo" ] [] ]
+                               ++ content
+                         , div [ class "col-12"
+                               , class "col-md-8"
+                               , class "artwork" ]
+                               [ ]
+                         ]
+                   , div [ class "hidden footer navbar fixed-bottom" ]
+                       [ a [ class "navbar-brand"
+                           , href "https://account.theborderland.se/auth/realms/master/protocol/openid-connect/logout?redirect_uri=https://memberships.theborderland.se"]
+                             [ text "Log Out" ]
+                       , a [ class "navbar-brand"
+                           , href "mailto:memberships@theborderland.se"] [ text "Contact us" ]
+                       ]
+                   ]
+             ]
+       ]
 
 view : Model -> Browser.Document Msg
 view model =
     case model.route of
         Just Home ->
             { title =
-                  mkTitle "Lottery"
+                  mkTitle "Home"
             , body =
                 case model.registration of
                     Just r ->
-                        viewTemplate model <| viewHome model.lottery r
+                        viewTemplate model <| viewHome model.lottery ++ viewRegistration model.lottery r
                     Nothing ->
-                        [] }
+                        []
+            }
 
         Just RegisterPage -> { title =
-                                   mkTitle "Registering"
-                             , body = viewTemplate model <|
-                                   [ div [] [ text "You're about to enter the wonderful world of registrering."]
-                                   , a [ href "/questions/1" ] [ text "Aks me questions?" ] ] }
+                                   mkTitle "Registration start"
+                             , body =
+                                 viewTemplate model <|
+                                     [ p [] [ text "To get you registered we'll ask you a couple of questions." ]
+                                     , p [] [ text "Some of these questions are needed to make the lottery fair, others purely to satisfy our curiosity."]
+                                     , p [] [ text "Regardless of your answers, your chances of winning the lottery are the same." ]
+                                     , a [ href "/questions/1" ] [ text "Let's go!" ] ] }
 
         Just (QuestionPage int) ->
             { title =
-                  mkTitle "Questions?" -- TODO
+                  mkTitle "Questions?"
             , body =
                 viewTemplate model <| [ viewQuestionPage model.questionSets model.questions int ] }
 
         Nothing -> { title = mkTitle "You're lost"
                    , body = [ text "You're in a maze of websites, all alike." ] }
 
-viewHome : Lottery -> Registration -> List (Html Msg)
-viewHome l r =
-    [ div []
-          [ h1 [] [ text "Borderland Membership Lottery"]
-          ]
-    ]
-    ++ [ viewRegistrationStatus l r ]
+
+viewHome : Lottery ->  List (Html Msg)
+viewHome lottery =
+           ([ div [] [ h1 [] [ text "The Borderland 2019 Membership Lottery"]
+            , (Maybe.withDefault "" lottery.message |> viewMessage) ]])
+
+viewMessage : String -> Html Msg
+viewMessage s =
+     div []
+         [ text s ]
+
+viewRegistration : Lottery -> Registration -> List (Html Msg)
+viewRegistration l r =
+    [ viewRegistrationStatus l r ]
     ++ [ Maybe.withDefault (text "") <| viewVoucherStatus l r ]
     ++ viewExtraVouchers l r
 
@@ -352,19 +396,20 @@ viewExtraVouchers l r =
 viewExtraVoucher : Lottery -> Registration -> Voucher -> Html Msg
 viewExtraVoucher l r v =
     div []
-        [ h2 [] [ text "You have an additional invitation "]
-        , text "Send it on or gift it to a friend. "
-        , text <| "It expires " ++ viewTime v.expires
+        [ h2 [] [ text "You have an extra invitation."]
+        , p [] [ text "You can pass it on, or gift it, to a friend. Your friend must be registered for the lottery." ]
+        , p [] [ text <| "The voucher expires " ++ viewTime v.expires ++ "."]
+        , p [] [ text "If you select \"Transfer Invite\" your friend will get an email and they can log on here to purchase their membership. You can also select \"Gift Membership\" and pay for your friend's membership." ]
         , div [] [input [ type_ "email"
                         , placeholder "Registered email"
                         , onInput (TransferFieldInput)
                         ] []
                  , input [ type_ "button"
-                         , value "Transfer invite"
+                         , value "Transfer Invite"
                          , onClick (TransferInvite v)
                          ] []
                  , input [ type_ "button"
-                         , value "Gift membership"
+                         , value "Gift Membership"
                          , onClick (GiftTicket v)
                   ] []
                  ]
@@ -374,12 +419,17 @@ viewVoucherStatus : Lottery -> Registration -> Maybe (Html Msg)
 viewVoucherStatus l r =
     case r.tickets of
         Just t ->
-            Just (div [] [ h2 [] [text  "you have a ticket yay etc"]
-                         , text "blah blah link to your info here" ])
+            Just (div [] [ h2 [] [text  "You're going to The Borderland 2019!"]
+                         , p [] [ text "You can view your receipt and print your entry pass "
+                                , a [ href t.url ] [ text "here" ]
+                                , text "." ]])
         Nothing ->
             case r.vouchers of
                 [] ->
-                    Nothing
+                    if r.registered then
+                        viewFCFSVoucher l r
+                    else
+                        Nothing
                 (x::_) ->
                     viewPersonalVoucher l r
 
@@ -387,9 +437,16 @@ viewPersonalVoucher : Lottery -> Registration -> Maybe (Html Msg)
 viewPersonalVoucher l r =
     head r.vouchers
         |> Maybe.andThen (\v -> Just <|
-                              div [] [ h2 [] [ text "You have an invitation!" ]
-                                     ,  text <| "It expires " ++ viewTime v.expires
-                                     , viewPretixButton l r v.code l.ticketItem ])
+                          div [] [ h2 [] [ text "You're invited to The Borderland 2019!" ]
+                                 ,  text <| "Hurry up and purchase your membership, the invitation expires " ++ viewTime v.expires ++ "!"
+                                 , viewPretixButton l r v.code l.ticketItem ])
+
+viewFCFSVoucher : Lottery -> Registration -> Maybe (Html Msg)
+viewFCFSVoucher l r =
+    l.fcfsVoucher |> Maybe.andThen (\v -> Just <|
+        (div [] [ h2 [] [ text "First Come First Serve!" ]
+                , p [] [ text "The lottery is over, but if there are memberships left over you can get them now!" ]
+                , viewPretixButton l r v l.ticketItem ]))
 
 viewTime : Time.Posix -> String
 viewTime t =
@@ -401,7 +458,8 @@ viewTime t =
         mon = stringFromMonth(Time.toMonth Time.utc t)
         yr = String.fromInt(Time.toYear Time.utc t)
     in
-        day ++ "-" ++ mon ++ "-" ++ yr ++ " " ++ hour ++ ":" ++ min ++ ":" ++ sec ++ " UTC"
+        mon ++ " " ++ day ++ ". at " ++ hour ++ ":" ++ min
+        -- day ++ "-" ++ mon ++ "-" ++ yr ++ " " ++ hour ++ ":" ++ min ++ ":" ++ sec ++ " UTC"
 
 stringFromMonth : Time.Month -> String
 stringFromMonth month =
@@ -428,25 +486,29 @@ viewPretixButton l r code item =
         , attribute "voucher" code
         , attribute "data-email" r.email
         , on "DOMNodeInserted" (JD.succeed RenderButtons)
-        ] [ text "Purchase membership" ]
+        ] [ text "Purchase Membership" ]
 
 viewRegistrationStatus : Lottery -> Registration -> Html Msg
 viewRegistrationStatus l r =
     if r.registered then
-        div [] <| [ text "You're registered!"
+        div [] <| [ h2 [] [ text "You're registered!" ]
+                  , p [] [ text "If you win the lottery you'll have two days to purchase your membership and to invite a friend along. Remember that your friend also has to be registered." ]
+                  , p [] [ text "We'll send an e-mail when you win, but since e-mail can be unreliable we recommended you check back here once a day during the lottery period February 16th to the 22th." ]
                ]
             ++ if l.can_register then
-                   [ a [ href "/register" ] [ text "Change your answers."] ]
+                   [ p [] [ a [ href "/register" ]
+                              [ text "If you need to, you can change your registration answers."] ]
+                   ]
                else
                    []
     else
         if l.can_register then
-          div []
-              [ text "Click here to register for Borderland 2019: "
-              , a [ href "/register" ] [ text "Register"]
-              ]
+          div [] <| [ h2 [] [ text "Registration is open!" ]
+                    , p [] [ text "Click here to register for The Borderland 2019: "
+                           , a [ href "/register" ] [ text "Register" ]
+                           ]]
         else
-            div [] [ text "Alas, registration is not open :(" ]
+            div [] [ p [] [ text "Hello! Registration opens here Thursday February 7th at 12:00 CET, and then you have a week to do it." ]]
 
 viewQuestionPage : List QuestionSet -> Dict Int Question -> Int -> Html Msg
 viewQuestionPage questionSets questions i =
@@ -454,25 +516,29 @@ viewQuestionPage questionSets questions i =
         (qset::[]) ->
             div []
                 [ viewQuestionSet qset questions
-                , a [ href "/"
-                    , onClick (PostAnswers qset True) ]
+                , a [ onClick (PostAnswers qset True "/")
+                    , href "#"]
                     [ text "Done!" ]
                 ]
 
         (qset::_) ->
-            div []
+            Html.form []
                 [ viewQuestionSet qset questions
-                , a [ href ("/questions/" ++ String.fromInt(i + 1))
-                    , onClick (PostAnswers qset False) ]
-                    [ text "Next" ]]
+                , a [ href "#"
+                         , onClick (PostAnswers qset False ("/questions/" ++ String.fromInt(i + 1))) ]
+                         [ text "Next" ] ]
         [] ->
            (text "No questions like that here")
 
+formatDesc : String -> List (Html Msg)
+formatDesc d =
+    String.split "\n" d |> List.map (\s -> p [] [ text s ])
+
 viewQuestionSet : QuestionSet -> Dict Int Question -> Html Msg
-viewQuestionSet qset qs = div [] [ h1 [] [ text qset.name ]
-                                 , text qset.description
-                                 , viewQuestions <| questionsForSet qset qs
-                                 ]
+viewQuestionSet qset qs = div [] <| [ h1 [] [ text qset.name ] ]
+                          ++ formatDesc qset.description
+                              ++ [ viewQuestions <| questionsForSet qset qs ]
+
 viewQuestions : List Question -> Html Msg
 viewQuestions qs = div []
                         (List.map (viewQuestion) qs)
@@ -540,8 +606,8 @@ getQuestions token i =
     authorizedGet token ("/api/questions/" ++ String.fromInt(i))
         (Http.expectJson GotQuestionSet questionSetDecoder)
 
-postAnswers : Model -> QuestionSet -> Cmd Msg
-postAnswers model qs =
+postAnswers : Model -> QuestionSet -> String -> Cmd Msg
+postAnswers model qs next =
     authorizedPost
                 (Http.jsonBody <| Json.Encode.object
                      (List.map
@@ -555,8 +621,7 @@ postAnswers model qs =
                           (questionsForSet qs model.questions)) )
                 model.token
                 ("/api/questions/" ++ String.fromInt(qs.id))
-                --(Http.expectJson GotQuestionSet questionSetDecoder)
-                (Http.expectWhatever Posted)
+                (Http.expectJson (PostedAnswers next) (JD.at ["result"] JD.bool))
 
 getRegistration : Token -> Cmd Msg
 getRegistration token =
@@ -618,20 +683,22 @@ questionSetDecoder = JD.map5 QuestionSet
                       (JD.at ["id"] JD.int)
                       (JD.at ["priority"] JD.int)
                       (JD.at ["questions"] (JD.list
-                           (JD.map6 Question
+                           (JD.map7 Question
                                 (JD.at ["id"] JD.int)
                                 (JD.at ["question"] JD.string)
                                 (JD.at ["answer"] JD.string)
                                 ((JD.at ["selections"] (JD.list JD.int))
                                 |> JD.andThen (\l -> JD.succeed (Set.fromList l)))
                                 (JD.at ["type"] questionTypeDecoder)
+                                (JD.maybe <| JD.at ["tooltip"] JD.string )
                                 (JD.at ["options"] (JD.list optionDecoder)))))
                       (JD.at ["name"] JD.string)
 
 optionDecoder : JD.Decoder Option
-optionDecoder = JD.map2 Option
+optionDecoder = JD.map3 Option
                 (JD.at ["id"] JD.int)
                 (JD.at ["text"] JD.string)
+                (JD.maybe <| JD.at ["tooltip"] JD.string)
 
 questionTypeDecoder : JD.Decoder QuestionType
 questionTypeDecoder = JD.string |> JD.andThen
@@ -650,12 +717,13 @@ questionTypeDecoder = JD.string |> JD.andThen
                           JD.fail <| "Unknown option type " ++ e)
 
 lotteryDecoder : JD.Decoder Lottery
-lotteryDecoder = JD.map6 Lottery
+lotteryDecoder = JD.map7 Lottery
                     (JD.at ["can_register"] JD.bool)
                     (JD.at ["can_transfer"] JD.bool)
-                    (JD.at ["child_item"] JD.string)
+                    (JD.maybe <| JD.at ["fcfs_voucher"] JD.string)
                     (JD.at ["ticket_item"] JD.string)
                     (JD.at ["pretix_event_url"] JD.string)
+                    (JD.maybe <| JD.at ["message"] JD.string)
                     (JD.at ["questions"] (JD.list JD.int))
 
 voucherDecoder : JD.Decoder Voucher

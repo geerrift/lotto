@@ -23,38 +23,89 @@ def send_message(msg):
     s.send_message(msg)
     s.quit()
 
-def voucher_allocated(recipient):
-    msg = new_message(recipient, "You're going to The Borderland 2019!",
+def registration_complete(recipient):
+    msg = new_message(recipient, "You're registered for The Borderland 2019!",
     '''
-pretty words go here
+Dearest Borderling,
+
+This is your confirmation! You've registered for the 2019 membership lottery!
+
+We'll send you another e-mail if you win, but we recommend you check the website during the lottery period since e-mail can be unreliable. You have two days to act when that happens.
+
+You can change your answers up until the lottery starts at
+    https://memberships.theborderland.se/
+
+Love,
+The Borderland Membership Team
+    ''')
+    send_message(msg)
+
+
+def voucher_allocated(recipient):
+    msg = new_message(recipient, "You're invited to The Borderland 2019!",
+    '''
+Dearest Borderling,
+
+You're invited to get a membership for you and a friend for The Borderland 2019!
+
+Please hurry, you only have two days!
+
+Go here: https://memberships.theborderland.se/
+
+Love,
+The Borderland Membership Team
     ''')
     send_message(msg)
 
 def order_complete(recipient):
     msg = new_message(recipient, "Your Borderland 2019 membership",
     '''
-pretty words go here
-    ''')
-    send_message(msg)
+Dearest Borderling,
 
-def registration_complete(recipient):
-    msg = new_message(recipient, "You're registered for The Borderland 2019!",
-    '''
-pretty words go here
+You did it! You're going to The Borderland! Have you started packing yet?
+
+You'll receive your printable ticket in a separate e-mail, please bring it
+together with ID to the port when you arrive.
+
+You can view your receipt at https://memberships.theborderland.se/
+
+Hugs,
+The Borderland Membership Team
     ''')
     send_message(msg)
 
 def gifted_ticket(recipient, sender):
     msg = new_message(recipient, "Someone gifted you a membership to The Borderland 2019!",
     '''
-pretty words go here {}
+Lovely Borderling,
+
+Someone going by the email {} gifted you a membership to The Borderland 2019!
+
+That's it, you're all set! Start packing!
+
+You'll receive your printable ticket in a separate e-mail, please bring it
+together with ID to the port when you arrive.
+
+You can view the receipt at https://memberships.theborderland.se/
+
+Hugs,
+The Borderland Membership Team
     '''.format(sender))
     send_message(msg)
 
 def voucher_transfer(recipient, sender, expiration):
     msg = new_message(recipient, "You've been invited to The Borderland 2019!",
     '''
-{} pretty words go here {}
+Dearest Borderling,
+
+Someone with the email address {} has sent you an invitation to The Borderland 2019!
+
+Go here to purchase your membership: https://memberships.theborderland.se
+
+Hurry up, it expires {}!
+
+Hugs,
+The Borderland Membership Team
     '''.format(sender, expiration))
     send_message(msg)
 

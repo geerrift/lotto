@@ -3,13 +3,21 @@
     <head>
         <meta charset="UTF-8">
         <title>Borderland Membership Lottery</title>
-        <link rel="stylesheet" href="/static/memberships.css">
-        <link rel="stylesheet" type="text/css" href="https://pretix.theborderland.se/borderland/test/widget/v1.css"> <!-- FIXME -->
-        <script src="https://account.theborderland.se/auth/js/keycloak.min.js"></script>
+
+        <!-- Our Elm webapp -->
         <script src="/static/main.js"></script>
+        <!-- External services -->
+        <script type="text/javascript" src="https://pretix.theborderland.se/widget/v1.en.js" async></script>
+        <link rel="stylesheet" type="text/css" href="https://pretix.theborderland.se/borderland/test/widget/v1.css">
+        <script src="https://account.theborderland.se/auth/js/keycloak.min.js"></script>
+        <!-- Polyfills -->
         <script type="module" src="/static/date-input-polyfill.dist.js" async></script>
         <script src="/static/datalist-polyfill.min.js" async></script>
-        <script type="text/javascript" src="https://pretix.theborderland.se/widget/v1.en.js" async></script>
+        <!-- Styling -->
+        <!-- FIXME fuck CDNs -->
+        <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.2.1/css/bootstrap.min.css" integrity="sha384-GJzZqFGwb1QTTN6wy59ffF1BuGJpLSa9DkKMp0DgiMDm4iYMj70gZWKYbI706tWS" crossorigin="anonymous">
+        <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.2.1/js/bootstrap.min.js" integrity="sha384-B0UglyR+jN6CkvvICOB2joaf5I4l3gm9GU6Hc1og6Ls7i6U/mkkaduKaBhlAXv9k" crossorigin="anonymous"></script>
+        <link rel="stylesheet" href="/static/memberships.css">
     </head>
     <body>
         <script>
