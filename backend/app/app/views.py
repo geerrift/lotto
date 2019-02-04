@@ -33,9 +33,9 @@ def lottery():
 def questionset(qs):
     u = get_or_create(Borderling, email=g.oidc_token_info['email'])
     if request.method == 'POST':
-        for k,v in request.get_json().items():
-            if not v:
-                return jsonify({"result": False, "message": "Empty answer"}), 400
+        #for k,v in request.get_json().items():
+            #if not v:
+            #    return jsonify({"result": False, "message": "Empty answer"}), 400
         for k,v in request.get_json().items():
             q = Question.query.filter_by(id=int(k)).first()
             q.answer(u, v)

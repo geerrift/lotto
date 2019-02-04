@@ -11,8 +11,8 @@ def db_test_data():
     lottery = Lottery(
                          registration_start = datetime(2019,2,3,8,0,tzinfo=tz),
                          registration_end = datetime(2019,2,5,23,0,tzinfo=tz),
-                         lottery_start = datetime(2019,2,3,17,0,tzinfo=tz),
-                         lottery_end = datetime(2019,2,3,17,30,tzinfo=tz),
+                         lottery_start = datetime(2019,2,3,19,0,tzinfo=tz),
+                         lottery_end = datetime(2019,2,3,19,30,tzinfo=tz),
                          transfer_start = datetime(2019,1,3,17,0,tzinfo=tz),
                          transfer_end = datetime(2019,2,28,20,50,tzinfo=tz),
                          fcfs_voucher = "FCFS",
