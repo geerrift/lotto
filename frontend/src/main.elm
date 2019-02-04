@@ -15,6 +15,7 @@ import Set exposing (..)
 import Time
 import Http
 import Debug
+import Array
 
 --
 
@@ -87,7 +88,9 @@ type alias Model
       , transfer_to : String
       , token: String
       , error: Maybe String
-      , loading: Int }
+      , loading: Int
+      , art : Int
+      }
 
 type alias HttpResource t
     = Result Http.Error t
@@ -144,6 +147,7 @@ init flags url key
             flags
             Nothing
             2
+            0
       , Cmd.batch [ getLottery flags
                   , getRegistration flags ] )
 
@@ -165,7 +169,8 @@ update msg model =
     LinkClicked urlRequest ->
       case urlRequest of
         Browser.Internal url ->
-            ( model, Nav.pushUrl model.key (Url.toString url) )
+            ( { model | art = model.art + 1 }
+            , Nav.pushUrl model.key (Url.toString url) )
 
         Browser.External href ->
           ( model, Nav.load href )
@@ -218,7 +223,7 @@ update msg model =
                      , Cmd.none )
 
     PostAnswers qs last next ->
-        ( { model | loading = model.loading + if last then 2 else 1 }
+        ( Debug.log "PostAnswers " { model | loading = model.loading + if last then 2 else 1 }
         , Cmd.batch
             ([ postAnswers model qs next ] ++
                  if last then
@@ -282,7 +287,8 @@ update msg model =
     PostedAnswers next m ->
         case m of
             Ok s ->
-               ( model, Nav.pushUrl model.key next )
+               ( { model | loading = model.loading - 1 }
+               , Nav.pushUrl model.key next )
             Err s ->
                 ( { model | error = Just "Unable to send answer!"
                   , loading = model.loading - 1 }, Cmd.none )
@@ -320,7 +326,7 @@ viewTemplate model content =
                          , div [ class "col-12"
                                , class "col-md-8"
                                , class "artwork"
-                               , class "art-glitter"
+                               , class <| "art-" ++ String.fromInt((Basics.modBy 8 model.art) + 1)
                                ]
                                [ ]
                          ]
@@ -353,10 +359,11 @@ view model =
                                    mkTitle "Registration start"
                              , body =
                                  viewTemplate model <|
-                                     [ p [] [ text "To get you registered we'll ask you a couple of questions." ]
-                                     , p [] [ text "Some of these questions are needed to make the lottery fair, others purely to satisfy our curiosity."]
-                                     , p [] [ text "Regardless of your answers, your chances of winning the lottery are the same." ]
-                                     , a [ href "/questions/1" ] [ text "Let's go!" ] ] }
+                                     [ p [ class "lead" ] [ text "To get you registered we'll ask you a couple of questions." ]
+                                     , p [ class "lead" ] [ text "Some of these questions are needed to make the lottery fair, others purely to satisfy our curiosity."]
+                                     , p [ class "lead" ] [ text "Regardless of your answers, your chances of winning the lottery are the same." ]
+                                     , a [ class "next-button"
+                                         , href "/questions/1" ] [ text "Let's go!" ] ] }
 
         Just (QuestionPage int) ->
             { title =
@@ -380,9 +387,14 @@ viewMessage s =
 
 viewRegistration : Lottery -> Registration -> List (Html Msg)
 viewRegistration l r =
-    [ viewRegistrationStatus l r ]
-    ++ [ Maybe.withDefault (text "") <| viewVoucherStatus l r ]
-    ++ viewExtraVouchers l r
+    case viewVoucherStatus l r of
+        Just voucherStatus ->
+            [ voucherStatus ]
+            ++ viewExtraVouchers l r
+            ++ [ viewRegistrationStatus l r ]
+        Nothing ->
+            [ viewRegistrationStatus l r ]
+            ++ viewExtraVouchers l r
 
 viewExtraVouchers : Lottery -> Registration -> List (Html Msg)
 viewExtraVouchers l r =
@@ -506,9 +518,11 @@ viewRegistrationStatus l r =
     else
         if l.can_register then
           div [] <| [ h2 [] [ text "Registration is open!" ]
-                    , p [] [ text "Click here to register for The Borderland 2019: "
-                           , a [ href "/register" ] [ text "Register" ]
-                           ]]
+                    , p [ ]
+                        [ a [ href "/register"
+                            , class "lead font-weight-bold" ]
+                             [ text "Click here to register for The Borderland 2019" ]
+                        ]]
         else
             div [] [ p [] [ text "Hello! Registration opens here Thursday February 7th at 12:00 CET, and then you have a week to do it." ]]
 
@@ -536,12 +550,12 @@ viewQuestionPage questionSets questions i =
 
 formatDesc : String -> List (Html Msg)
 formatDesc d =
-    String.split "\n" d |> List.map (\s -> p [] [ text s ])
+    String.split "\n" d |> List.map (\s -> p [ class "lead" ] [ text s ])
 
 viewQuestionSet : QuestionSet -> Dict Int Question -> Html Msg
 viewQuestionSet qset qs = div [] <| [ h1 [] [ text qset.name ] ]
                           ++ formatDesc qset.description
-                              ++ [ viewQuestions <| questionsForSet qset qs ]
+                          ++ [ viewQuestions <| questionsForSet qset qs ]
 
 viewQuestions : List Question -> Html Msg
 viewQuestions qs = div []
@@ -564,19 +578,23 @@ viewQuestion q =
                                , value q.answer
                                , Html.Attributes.min "0"
                                , Html.Attributes.required True
+                               , placeholder <| Maybe.withDefault "" q.tooltip
                                , onInput (UpdateAnswer q.id) ] [] ]
                   Date ->
                       [ input [ type_ "date"
                                , id qId
                                , value q.answer
                                , Html.Attributes.required True
+                               , placeholder <| Maybe.withDefault "" q.tooltip
                                , onInput (UpdateAnswer q.id) ] [] ]
                   Text ->
                       [ input [ type_ "text"
                                , id qId
                                , value q.answer
                                , Html.Attributes.required True
-                               , onInput (UpdateAnswer q.id) ] [] ]
+                               , onInput (UpdateAnswer q.id)
+                               , placeholder <| Maybe.withDefault "" q.tooltip ]
+                            [] ]
                   DataList ->
                       [ input [ type_ "text"
                               , id qId
@@ -600,7 +618,16 @@ viewOption q o =
                     , id id_
                     , onCheck (ToggleCheckbox q o)
                     , checked (Set.member o.id q.selections) ] []
-            , label [ for id_ ] [ text o.text ]
+            , label [ for id_ ] [
+                   case (Debug.log "tooltip " o).tooltip of
+                       Just tooltip ->
+                          div [ class "tooltipp" ]
+                              [ text o.text
+                              , span [ class "tooltipptext" ] [ text tooltip ]
+                              ]
+                       Nothing ->
+                          text o.text
+                  ]
             ]
 
 -- HTTP resources

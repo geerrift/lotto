@@ -63,10 +63,10 @@ app.config.update({
 # Magic value land! TODO make a config store. Some of this belongs in the
 # Lottery class
 host = "pretix.theborderland.se"
-org = "borderland"
-event = "test3"
+org = os.getenv("PRETIX_ORG") or "borderland"
+event = os.getenv("PRETIX_EVENT") or "test3"
 expiration_delta = { "days": 2 }
-item = 5
+item = int(os.getenv("PRETIX_ITEM")) or 5
 child_item = 6
 
 

@@ -68,6 +68,13 @@ class Lottery(db.Model):
                  "ticket_item": "item_{}=1".format(self.ticket_item),
                  "pretix_event_url": self.pretix_event_url,
                  "message": self.message,
+                 "lottery_start": self.lottery_start,
+                 "lottery_end": self.lottery_end,
+                 "transfer_start": self.transfer_start,
+                 "transfer_end": self.transfer_end,
+                 "registration_start": self.registration_start,
+                 "registration_end": self.registration_end,
+                 "time": datetime.utcnow(),
                  "questions": [ qs.id for qs in self.questionsets ]}
 
 class Borderling(db.Model):
@@ -204,7 +211,8 @@ class QuestionOption(db.Model):
 
     def to_dict(self):
         return { "id": self.id,
-                 "text" : self.text }
+                 "text" : self.text,
+                 "tooltip": self.tooltip }
 
 class Questionset(db.Model):
     id = db.Column(db.Integer, primary_key=True)
