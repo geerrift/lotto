@@ -7,15 +7,15 @@ child_item = 6
 
 
 def db_test_data():
-    tz = timezone(offset=timedelta(hours = 1))
+    tz = timezone(offset=timedelta(hours = 0))
     lottery = Lottery(
-                         registration_start = datetime(2019,2,3,8,0,tzinfo=tz),
+                         registration_start = datetime(2019,2,4,8,0,tzinfo=tz),
                          registration_end = datetime(2019,2,5,23,0,tzinfo=tz),
-                         lottery_start = datetime(2019,2,3,19,0,tzinfo=tz),
-                         lottery_end = datetime(2019,2,3,19,30,tzinfo=tz),
-                         transfer_start = datetime(2019,1,3,17,0,tzinfo=tz),
+                         lottery_start = datetime(2019,2,4,22,0,tzinfo=tz),
+                         lottery_end = datetime(2019,2,4,22,30,tzinfo=tz),
+                         transfer_start = datetime(2019,1,4,17,0,tzinfo=tz),
                          transfer_end = datetime(2019,2,28,20,50,tzinfo=tz),
-                         fcfs_voucher = "FCFS",
+                         fcfs_voucher = None,
                          child_voucher = "",
                          child_item = child_item,
                          ticket_item = item,
@@ -24,20 +24,17 @@ def db_test_data():
 
 
     db.session.commit()
-    personal_qs = Questionset(lottery_id = lottery.id, priority=10, name="Personal questions",description='''
-    To make the lottery fair we need to check your ID when you arrive at the port. Please fill out the following like it appears on an official document.
+    personal_qs = Questionset(lottery_id = lottery.id, priority=10, name="Personal questions",description='''To make the lottery fair we need to check your ID when you arrive at the port. Please fill out the following like it appears on an official document.
 
-    Kids under 13 get in for free with a member guardian, if you plan on bringing kids please indicate how many.
+Kids under 13 get in for free with a member guardian, if you plan on bringing kids please indicate how many.
     ''')
 
     demographic_qs = Questionset(lottery_id = lottery.id, priority=30, name="Demographic questions",
-                                 description='''
-                                 We'd also like to know a few things about the people attending.
+                                 description='''We'd like to know a few things about the people attending.
 ''')
 
     volunteer_qs = Questionset(lottery_id = lottery.id, priority=20, name="Voluteer questions",
-                               description='''
-The Borderland is built on co-creation and a community that takes care of each other.
+                               description='''The Borderland is built on co-creation and a community that takes care of each other.
 
 Most of what happens at The Borderland is organised in a decentralised fashion by camps, but there are certain infrastructual and civic reponsibilities the needs to be in place. 
 ''')

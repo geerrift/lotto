@@ -15,6 +15,7 @@ import Set exposing (..)
 import Time
 import Http
 import Array
+import Markdown
 
 --
 
@@ -382,7 +383,7 @@ viewHome lottery =
 viewMessage : String -> Html Msg
 viewMessage s =
      div []
-         [ text s ]
+         [ Markdown.toHtml [] s ]
 
 viewRegistration : Lottery -> Registration -> List (Html Msg)
 viewRegistration l r =
@@ -390,7 +391,10 @@ viewRegistration l r =
         Just voucherStatus ->
             [ voucherStatus ]
             ++ viewExtraVouchers l r
-            ++ [ viewRegistrationStatus l r ]
+            ++ if l.can_register then
+                   [ viewRegistrationStatus l r ]
+               else
+                   []
         Nothing ->
             [ viewRegistrationStatus l r ]
             ++ viewExtraVouchers l r
@@ -432,10 +436,24 @@ viewVoucherStatus : Lottery -> Registration -> Maybe (Html Msg)
 viewVoucherStatus l r =
     case r.tickets of
         Just t ->
-            Just (div [] [ h2 [] [text  "You're going to The Borderland 2019!"]
+            Just (div [] [ h2 [] [ text  "You're going to The Borderland 2019!"]
                          , p [] [ text "You can view your receipt and print your entry pass "
                                 , a [ href t.url ] [ text "here" ]
-                                , text "." ]])
+                                , text "." ]
+                         , if l.can_transfer then
+                               div [] [ p [] [ text "You're currently permitted to transfer your membership. The recipient must have registered. Please note that re-selling memberships above face value is not allowed."
+                                             , input [ type_ "email"
+                                                     , placeholder "Registered email"
+                                                     , onInput TransferFieldInput ] []
+                                             , input [ type_ "button"
+                                                     , value "Transfer membership"
+                                                     -- , onClick (Noop) TODO needs modal
+                                                     ] []
+                                             ]
+                                      ]
+                           else
+                               text ""
+                         ])
         Nothing ->
             case r.vouchers of
                 [] ->
@@ -548,8 +566,9 @@ viewQuestionPage questionSets questions i =
            (text "No questions like that here")
 
 formatDesc : String -> List (Html Msg)
-formatDesc d =
-    String.split "\n" d |> List.map (\s -> p [ class "lead" ] [ text s ])
+formatDesc d = -- TODO the description should be changed to Html and parsed in the decoder
+    [ Markdown.toHtml [] d ]
+    --String.split "\n" d |> List.map (\s -> p [ class "lead" ] [ text s ])
 
 viewQuestionSet : QuestionSet -> Dict Int Question -> Html Msg
 viewQuestionSet qset qs = div [] <| [ h1 [] [ text qset.name ] ]

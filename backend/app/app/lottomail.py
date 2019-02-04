@@ -30,7 +30,9 @@ Dearest Borderling,
 
 This is your confirmation! You've registered for the 2019 membership lottery!
 
-We'll send you another e-mail if you win, but we recommend you check the website during the lottery period since e-mail can be unreliable. You have two days to act when that happens.
+The lottery runs from the 16th to the 22nd.
+
+We'll send you another e-mail if you win. However it's recommended you check the website every day or two during the lottery since e-mail can be unreliable. You have two days to act when you get an invitation.
 
 You can change your answers up until the lottery starts at
     https://memberships.theborderland.se/

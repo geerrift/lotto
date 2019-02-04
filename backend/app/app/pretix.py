@@ -111,5 +111,5 @@ def voucher_info(vid):
 
 
 def update_order_name(a, b):
-    app.logger.warn("UNIMPLEMENTED update {} with {}".format(a, b))
+    app.logger.error("UNIMPLEMENTED update {} with {}".format(a, b))
 

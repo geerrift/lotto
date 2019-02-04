@@ -263,15 +263,19 @@ class Voucher(db.Model):
         if origin.id != self.borderling_id:
             app.logger.warn("Attempt to transfer ticket {} from {} to {}, but not owned by {}".format(self, origin, target, self.borderling_id))
             return False
-        if self.primary:
+        if self.primary and not get_lottery().transferAllowed:
             app.logger.error("Attempt to transfer primary voucher: {}".format(self))
             return False
         if target.vouchers and target.vouchers[0].order:
-                app.logger.error("Attempt to transfer but target already has paid vouchers: {}".format(self))
-                return False
+            app.logger.error("Attempt to transfer but target already has paid vouchers: {}".format(self))
+            return False
         if target.vouchers and target.vouchers[0].expires > datetime.utcnow():
             app.logger.error("Attempt to transfer but target already has valid voucher: {}".format(self))
             return False
+        self.move(origin, target)
+        return True
+
+    def move(self, origin, target):
         self.primary = True
         self.borderling_id = target.id
         self.gifted_to = None

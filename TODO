@@ -1,13 +1,12 @@
 
-double check the freaking time zone stuff for expiration!
-
-
 Transfer bought tickets missing (blocked in backend, not visible in UI)
    - post lottery
 
 --- tricky ---
 
 3. Update order name
+
+
 
 -- 
 
@@ -21,11 +20,11 @@ Safari polyfill for date
 
 -- soon after reg
 
-- IAM dreams integration
+IAM dreams integration
 
 -- stretch goals
 
 - Frontend: pre-login front page
 - frontend: modules
 - backend: create log table, store ip, requests etc
-- stretch goal: pretty HTML emails
+- pretty HTML emails

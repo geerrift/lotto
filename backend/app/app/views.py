@@ -57,8 +57,11 @@ def transfer_voucher():
             app.logger.warn("transfer {}".format(result))
             if result:
                 lottomail.voucher_transfer(dest.email, u.email, voucher.expires)
+            else:
+                return jsonify(u.to_dict(lottery)), 401
         else:
             app.logger.warn("transfer failed {} to {}".format(voucher, dest))
+            return jsonify(u.to_dict(lottery)), 401
     return jsonify(u.to_dict(lottery))
 
 # Mark a voucher as gifted, will do the actual transfer once it's been paid in
@@ -94,7 +97,7 @@ def pretix_webhook():
         app.logger.info("Webhook order.paid: {} for {}".format(d['code'], pretix_voucher))
         voucher = Voucher.query.filter(Voucher.code == pretix_voucher['code']).first()
         borderling = Borderling.query.filter(Borderling.id == voucher.borderling_id).first()
-        if voucher and not voucher.order:
+        if voucher:
             # update order info
             voucher.order = d['code']
             voucher.secret = orderinfo['secret']
@@ -102,13 +105,11 @@ def pretix_webhook():
                 recipient = Borderling.query.filter(Borderling.id == Voucher.gifted_to).first()
                 if Voucher.query.filter(Voucher.borderling_id == recipient.id, Voucher.order != None):
                     app.logger.info("Webhook: transfering gifted voucher from {} to {}".format(borderling, recipient))
-                    if voucher.transfer(borderling, recipient):
+                    if voucher.move(borderling, recipient):
                         lottomail.gifted_ticket(recipient.email, borderling.email)
                         pretix.update_order_name(d['code'], borderling.pretix_name())
                 else:
                     app.logger.error("Webhook: Order {} gifted to {} who already has ticket".format(d['code'], recipient))
-                    raise ValueError("Refund? Limbo ticket! {}".format(d['code'])) # TODO this is a human race condition, hard to solve
-                    #lottomail.alert.. something
             else:
                 app.logger.info("Webhook: purchase completed for {}".format(borderling))
                 lottomail.order_complete(borderling.email)
