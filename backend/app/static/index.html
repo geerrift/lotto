@@ -3,7 +3,6 @@
     <head>
         <meta charset="UTF-8">
         <title>Borderland Membership Lottery</title>
-
         <!-- Our Elm webapp -->
         <script src="/static/main.js"></script>
         <!-- External services -->
@@ -14,9 +13,7 @@
         <script type="module" src="/static/date-input-polyfill.dist.js" async></script>
         <script src="/static/datalist-polyfill.min.js" async></script>
         <!-- Styling -->
-        <!-- FIXME fuck CDNs -->
-        <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.2.1/css/bootstrap.min.css" integrity="sha384-GJzZqFGwb1QTTN6wy59ffF1BuGJpLSa9DkKMp0DgiMDm4iYMj70gZWKYbI706tWS" crossorigin="anonymous">
-        <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.2.1/js/bootstrap.min.js" integrity="sha384-B0UglyR+jN6CkvvICOB2joaf5I4l3gm9GU6Hc1og6Ls7i6U/mkkaduKaBhlAXv9k" crossorigin="anonymous"></script>
+        <link rel="stylesheet" href="/static/bootstrap.min.css">
         <link rel="stylesheet" href="/static/memberships.css">
     </head>
     <body>
@@ -35,7 +32,7 @@
                         if (t) {
                             app.ports.kcToken.send(keycloak.token);
                         } else {
-                            console.log('Token not refreshed, valid for ' + Math.round(keycloak.tokenParsed.exp + keycloak.timeSkew - new Date().getTime() / 1000) + ' seconds');
+                            //console.log('Token not refreshed, valid for ' + Math.round(keycloak.tokenParsed.exp + keycloak.timeSkew - new Date().getTime() / 1000) + ' seconds');
                         };
                     }).error(function(e) {
                         alert("Logged out of borderland account!");

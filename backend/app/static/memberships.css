@@ -240,9 +240,9 @@ input[type=number]::-webkit-inner-spin-button {
     content: url(/static/loading.gif);
     width: 30%;
     max-width: 200px;
-    position: absolute;
+    position: sticky;
     top: 0;
-    right: 0;
+    float: right;
 }
 
 .hidden {

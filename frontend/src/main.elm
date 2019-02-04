@@ -14,7 +14,6 @@ import Dict exposing (..)
 import Set exposing (..)
 import Time
 import Http
-import Debug
 import Array
 
 --
@@ -223,7 +222,7 @@ update msg model =
                      , Cmd.none )
 
     PostAnswers qs last next ->
-        ( Debug.log "PostAnswers " { model | loading = model.loading + if last then 2 else 1 }
+        ( { model | loading = model.loading + if last then 2 else 1 }
         , Cmd.batch
             ([ postAnswers model qs next ] ++
                  if last then
@@ -619,7 +618,7 @@ viewOption q o =
                     , onCheck (ToggleCheckbox q o)
                     , checked (Set.member o.id q.selections) ] []
             , label [ for id_ ] [
-                   case (Debug.log "tooltip " o).tooltip of
+                   case o.tooltip of
                        Just tooltip ->
                           div [ class "tooltipp" ]
                               [ text o.text

@@ -66,7 +66,7 @@ host = "pretix.theborderland.se"
 org = os.getenv("PRETIX_ORG") or "borderland"
 event = os.getenv("PRETIX_EVENT") or "test3"
 expiration_delta = { "days": 2 }
-item = int(os.getenv("PRETIX_ITEM")) or 5
+item = int(os.getenv("PRETIX_ITEM") or 5)
 child_item = 6
 
 
