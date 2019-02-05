@@ -40,6 +40,7 @@ You can change your answers up until the lottery starts at
     https://memberships.theborderland.se/
 
 Also, join https://www.facebook.com/groups/theborderland/ for the latest information and check out https://talk.theborderland.se for the real deal.
+Why don't you sign up for the newsletter, it will keep you posted in the future! https://us7.campaign-archive.com/home/?u=4470de6245e702ef226931fa9&id=7967e4716f&fbclid=IwAR3tCPRpRi_TF_gs_UoK9qp0TuXRYSyVP9kRwHciOcrTzvJL-4U7IzTEA0Q
 
 Love,
 The Borderland Membership Team
@@ -60,6 +61,8 @@ TRANSFER, means that the +1 registered friend has to log on to their own account
 Please hurry, you only have two days!
 
 Go here: https://memberships.theborderland.se/
+
+You will get your membership after you paid.
 
 Love,
 The Borderland Membership Team
