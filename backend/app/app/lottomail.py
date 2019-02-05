@@ -54,6 +54,8 @@ Dearest Borderling,
 
 You're invited to get a membership for you and a friend for The Borderland 2019!
 You can either pay for both memberships, or just for your own and transfer the other one to another person who has a registered profile.
+GIFT, means that you pay for your registered +1 friend. You write the e-mail of your +1 registered friend in the box. 
+TRANSFER, means that the +1 registered friend has to log on to their own account and pay for the membership. You write the e-mail of your +1 registered friend in the box. 
 
 Please hurry, you only have two days!
 
