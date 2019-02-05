@@ -33,14 +33,18 @@ Kids under 13 get in for free with a member guardian, if you plan on bringing ki
                                  description='''We'd like to know a few things about the people attending.
 ''')
 
-    volunteer_qs = Questionset(lottery_id = lottery.id, priority=20, name="Voluteer questions",
+    volunteer_qs = Questionset(lottery_id = lottery.id, priority=20, name="Volunteer questions",
                                description='''The Borderland is built on co-creation and a community that takes care of each other.
 
-Most of what happens at The Borderland is organised in a decentralised fashion by camps, but there are certain infrastructual and civic reponsibilities the needs to be in place. 
+Most of what happens at The Borderland is organised in a decentralised fashion by camps, but there are certain infrastructual and civic reponsibilities the needs to be in place.
 ''')
+    volunteer_qs2 = Questionset(lottery_id = lottery.id, priority=25, name="Volunteer questions",
+                               description='''''')
+
 
     db.session.add(personal_qs)
     db.session.add(volunteer_qs)
+    db.session.add(volunteer_qs2)
     db.session.add(demographic_qs)
     db.session.commit()
     q1 = Question(set_id = personal_qs.id, text="Your name as it appears on official documents", type = "text", tag="realname",
@@ -67,7 +71,7 @@ Please indicate if you'd like to be contacted about taking on responsibilities i
                                 QuestionOption(text = "Communal Spaces"),
                                 QuestionOption(text = "Communications")
                             ]))
-    db.session.add(Question(set_id = volunteer_qs.id,
+    db.session.add(Question(set_id = volunteer_qs2.id,
                             type = "multiple",
                             text = '''
 Please let us know if you have any special skills or relevant experience and would like to help out within one (or more) of the following areas:

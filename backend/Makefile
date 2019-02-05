@@ -1,4 +1,12 @@
+NAME   := krav/lotto
+TAG    := $$(git log -1 --pretty='%H')
+IMG    := ${NAME}:${TAG}
+LATEST := ${NAME}:latest
 
-all:
-	docker build -t krav/lotto:latest .
-	docker push krav/lotto
+build:
+	docker build -t ${IMG} .
+	docker tag ${IMG} ${LATEST}
+
+push:
+	docker push ${NAME}
+

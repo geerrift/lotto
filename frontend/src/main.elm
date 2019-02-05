@@ -308,23 +308,23 @@ mkTitle t = "Borderland 2019 Membership - " ++ t
 
 viewTemplate : Model -> List (Html Msg) -> List (Html Msg)
 viewTemplate model content =
-    [ div [ class "outer_container" ]
+    [ div [ id "loading"
+          , class <| if (model.loading > 0) then "visible" else "hidden"
+          ] []
+    , div [ class "outer_container" ]
              [ div [ class "container"]
-                   [ div [ id "loading"
-                         , class <| if (model.loading > 0) then "visible" else "hidden"
-                         ] []
-                   , (case model.error of
+                   [ (case model.error of
                           Nothing ->
                             text ""
                           Just e ->
                             div [ class "alert alert-danger sticky-top" ]
                             [ text <| "Error! " ++ e ] )
                    , div [ class "row" ]
-                         [ div [ class "col-6", class "col-md-4" ]
+                         [ div [ class "col", class "col-lg-5" ]
                                <| [ div [ class "logo" ] [] ]
                                ++ content
-                         , div [ class "col-12"
-                               , class "col-md-8"
+                         , div [ class "col-6"
+                               , class "col-md-7"
                                , class "artwork"
                                , class <| "art-" ++ String.fromInt((Basics.modBy 8 model.art) + 1)
                                ]
@@ -442,14 +442,14 @@ viewVoucherStatus l r =
                                 , text "." ]
                          , if l.can_transfer then
                                div [] [ p [] [ text "You're currently permitted to transfer your membership. The recipient must have registered. Please note that re-selling memberships above face value is not allowed."
-                                             , input [ type_ "email"
-                                                     , placeholder "Registered email"
-                                                     , onInput TransferFieldInput ] []
-                                             , input [ type_ "button"
-                                                     , value "Transfer membership"
-                                                     -- , onClick (Noop) TODO needs modal
-                                                     ] []
-                                             ]
+                                             , div [] [ input [ type_ "email"
+                                                              , placeholder "Registered email"
+                                                              , onInput TransferFieldInput ] []
+                                                      , input [ type_ "button"
+                                                              , value "Transfer membership"
+                                                              -- , onClick (Noop) TODO needs modal
+                                                              ] []
+                                             ]]
                                       ]
                            else
                                text ""

@@ -23,10 +23,10 @@ body {
     transform: rotateZ(360deg);
     backface-visibility: hidden;
     perspective: 1000;
-/*    -webkit-animation: filter-animation 30s ease infinite;
+    -webkit-animation: filter-animation 30s ease infinite;
     -moz-animation: filter-animation 30s ease infinite;
     -o-animation: filter-animation 30s ease infinite;
-    animation: filter-animation 30s ease infinite; */
+    animation: filter-animation 30s ease infinite;
     position: absolute;
     height: auto;
     width: 100%;
@@ -84,7 +84,7 @@ p {
   }
 }
 
-.art-glitter {
+.art-1 {
   background-image: url("/static/artwork/svg/art4.svg");
   background-position: 65% 50px;
   background-size: 120%;
@@ -240,13 +240,14 @@ input[type=number]::-webkit-inner-spin-button {
     content: url(/static/loading.gif);
     width: 30%;
     max-width: 200px;
-    position: sticky;
+    position: fixed;
     top: 0;
-    float: right;
+    right: 0;
+    z-index: 9999;
 }
 
 .hidden {
-    visibility: hidden;
+    display: none;
 }
 
 /* Tooltips, stolen from w3school */
