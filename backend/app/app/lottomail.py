@@ -34,6 +34,8 @@ The lottery runs from the 16th to the 22nd.
 
 We'll send you another e-mail if you win. However it's recommended you check the website every day or two during the lottery since e-mail can be unreliable. You have two days to act when you get an invitation.
 
+Don't forget to tell all your friends to attend the lottery! Everyone going to the Borderland must be registered in this system (there are two exceptions and you can read about them on the webpage).
+
 You can change your answers up until the lottery starts at
     https://memberships.theborderland.se/
 
