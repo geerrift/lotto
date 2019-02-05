@@ -86,8 +86,8 @@ Please let us know if you have any special skills or relevant experience and wou
     db.session.add(Question(set_id = demographic_qs.id,
                             type = "datalist",
                             text = "In which country do you presently live?",
-                            options = [ QuestionOption(text = c['Name'])
-                                        for c in json.load(open("./countries.json")) ]))
+                            options = [ QuestionOption(text = "i'm lost") ])) # c['Name'])
+                                        # for c in json.load(open("../countries.json")) ]))
     db.session.add(Question(set_id = demographic_qs.id,
                             type = "number",
                             text = "How many Burn-like events have you been to before (The Borderland, Burning Man, Nowhere, ...)?"))

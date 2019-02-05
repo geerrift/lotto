@@ -335,7 +335,7 @@ viewTemplate model content =
                            , href "https://account.theborderland.se/auth/realms/master/protocol/openid-connect/logout?redirect_uri=https://memberships.theborderland.se"]
                              [ text "Log Out" ]
                        , a [ class "navbar-brand"
-                           , href "mailto:memberships@theborderland.se"] [ text "Contact us" ]
+                           , href "mailto:memberships@theborderland.se?subject=i just thought of you and wanted to say hello"] [ text "Contact us" ]
                        ]
                    ]
              ]

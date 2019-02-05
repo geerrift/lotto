@@ -104,11 +104,9 @@ from views import *
 from models import *
 import pretix
 
+from test_data import db_test_data
+db.create_all()
+db_test_data()
+
 if __name__ == '__main__':
-    print("Creating test data")
-    from test_data import db_test_data
-    db.create_all()
-    db_test_data()
-
-
     app.run(debug = True, host="0.0.0.0")
