@@ -105,10 +105,10 @@ from models import *
 import pretix
 
 if __name__ == '__main__':
-    if not Lottery.query.first():
-        print("Creating test data")
-        from test_data import db_test_data
-        db_test_data()
+    print("Creating test data")
+    from test_data import db_test_data
+    db.create_all()
+    db_test_data()
 
 
     app.run(debug = True, host="0.0.0.0")

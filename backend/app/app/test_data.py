@@ -1,20 +1,18 @@
 from main import *
 from datetime import timezone, timedelta
 
-event = "test3"
-item = 5
-child_item = 6
-
+event = 2019
+item = 7
 
 def db_test_data():
     tz = timezone(offset=timedelta(hours = 0))
     lottery = Lottery(
-                         registration_start = datetime(2019,2,4,8,0,tzinfo=tz),
-                         registration_end = datetime(2019,2,5,23,0,tzinfo=tz),
-                         lottery_start = datetime(2019,2,4,22,0,tzinfo=tz),
-                         lottery_end = datetime(2019,2,4,22,30,tzinfo=tz),
-                         transfer_start = datetime(2019,1,4,17,0,tzinfo=tz),
-                         transfer_end = datetime(2019,2,28,20,50,tzinfo=tz),
+                         registration_start = datetime(2019,1,7,11,0,tzinfo=tz),
+                         registration_end = datetime(2019,5,31,23,59,tzinfo=tz),
+                         lottery_start = datetime(2019,2,16,20,0,tzinfo=tz),
+                         lottery_end = datetime(2019,2,22,21,0,tzinfo=tz),
+                         transfer_start = datetime(2019,2,26,21,0,tzinfo=tz),
+                         transfer_end = datetime(2019,5,31,20,0,tzinfo=tz),
                          fcfs_voucher = None,
                          child_voucher = "",
                          child_item = child_item,
@@ -99,10 +97,10 @@ Please let us know if you have any special skills or relevant experience and wou
     db.session.commit()
 
 
-if __name__ == '__main__':
-    import sys
-    print("Danger zone")
-    sys.stdin.readline()
-    db.drop_all()
-    db.create_all()
-    db_test_data()
+#if __name__ == '__main__':
+#    import sys
+#    print("Danger zone")
+#    sys.stdin.readline()
+#    db.drop_all()
+#    db.create_all()
+#    db_test_data()

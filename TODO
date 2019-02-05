@@ -1,31 +1,36 @@
 
+
+ 
+
+Pretix Update order real name
+
+
+
 Transfer bought tickets missing 
    - new view in backend
    - post in frontend
 
---- tricky ---
 
-3. Update order name
+transfer confirmation modal
 
-
-
--- 
-
-Documentation
-Support, data protection contact info
-        
--- maybe
-
-You can progress without giving input
-Safari polyfill for date
-
--- soon after reg
 
 IAM dreams integration
 
+--
+
+Documentation
+
+
+
+
+-- maybe
+
+You can progress without giving input OH WELL
+Safari polyfill for date
+
 -- stretch goals
 
+refactor with modules
 - Frontend: pre-login front page
-- frontend: modules
 - backend: create log table, store ip, requests etc
 - pretty HTML emails

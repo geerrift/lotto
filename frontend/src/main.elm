@@ -632,10 +632,11 @@ viewOption q o =
         id_ = ("option-" ++ String.fromInt o.id)
     in
         div []
-            [ input [ type_ "checkbox"
-                    , id id_
-                    , onCheck (ToggleCheckbox q o)
-                    , checked (Set.member o.id q.selections) ] []
+            [ label [ class "checkboxhack" ] [ input [ type_ "checkbox"
+                                                     , id id_
+                                                     , onCheck (ToggleCheckbox q o)
+                                                     , checked (Set.member o.id q.selections) ] []
+                                             , span [] [] ]
             , label [ for id_ ] [
                    case o.tooltip of
                        Just tooltip ->
