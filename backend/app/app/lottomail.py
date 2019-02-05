@@ -39,6 +39,8 @@ Don't forget to tell all your friends to attend the lottery! Everyone going to t
 You can change your answers up until the lottery starts at
     https://memberships.theborderland.se/
 
+Also, join https://www.facebook.com/groups/theborderland/ for the latest information and check out https://talk.theborderland.se for the real deal.
+
 Love,
 The Borderland Membership Team
     ''')
@@ -51,6 +53,7 @@ def voucher_allocated(recipient):
 Dearest Borderling,
 
 You're invited to get a membership for you and a friend for The Borderland 2019!
+You can either pay for both memberships, or just for your own and transfer the other one to another person who has a registered profile.
 
 Please hurry, you only have two days!
 
