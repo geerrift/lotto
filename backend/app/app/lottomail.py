@@ -30,21 +30,28 @@ Dearest Borderling,
 
 This is your confirmation! You've registered for the 2019 membership lottery!
 
+We'll send you another e-mail when you win. However it's recommended you check
+the website every day or two during the lottery since e-mail can be unreliable.
+You have two days to act once you get an invitation.
+
 The lottery runs from the 16th to the 22nd.
 
-We'll send you another e-mail if you win. However it's recommended you check the website every day or two during the lottery since e-mail can be unreliable. You have two days to act when you get an invitation.
-
-Don't forget to tell all your friends to attend the lottery! Everyone going to the Borderland must be registered in this system (there are two exceptions and you can read about them on the webpage).
-
-You can change your answers up until the lottery starts at
+You can change your answers up until the 14th at,
     https://memberships.theborderland.se/
 
-Also, join https://www.facebook.com/groups/theborderland/ for the latest information and check out https://talk.theborderland.se for the real deal.
-Why don't you sign up for the newsletter, it will keep you posted in the future! https://us7.campaign-archive.com/home/?u=4470de6245e702ef226931fa9&id=7967e4716f&fbclid=IwAR3tCPRpRi_TF_gs_UoK9qp0TuXRYSyVP9kRwHciOcrTzvJL-4U7IzTEA0Q
+Now might be a good time to remind your friends and campmates to sign up.
+
+To keep informed you can:
+    * Join Talk, where the event is planned and co-created,
+      https://talk.theborderland.se/
+    * Sign up for the mailing list,
+      https://us7.campaign-archive.com/home/?u=4470de6245e702ef226931fa9&id=7967e4716f
+    * Join our hellsite group,
+      https://www.facebook.com/groups/theborderland/
 
 Love,
 The Borderland Membership Team
-    ''')
+''')
     send_message(msg)
 
 
@@ -53,16 +60,14 @@ def voucher_allocated(recipient):
     '''
 Dearest Borderling,
 
-You're invited to get a membership for you and a friend for The Borderland 2019!
-You can either pay for both memberships, or just for your own and transfer the other one to another person who has a registered profile.
-GIFT, means that you pay for your registered +1 friend. You write the e-mail of your +1 registered friend in the box. 
-TRANSFER, means that the +1 registered friend has to log on to their own account and pay for the membership. You write the e-mail of your +1 registered friend in the box. 
+You're invited to get a membership to The Borderland 2019!
+
+In addition we've given you an extra invite you can pass on, or gift, to a
+friend.
 
 Please hurry, you only have two days!
 
 Go here: https://memberships.theborderland.se/
-
-You will get your membership after you paid.
 
 Love,
 The Borderland Membership Team
@@ -91,11 +96,11 @@ def gifted_ticket(recipient, sender):
     '''
 Lovely Borderling,
 
-Someone going by the email {} gifted you a membership to The Borderland 2019!
+Someone going by the e-mail {} gifted you a membership to The Borderland 2019!
 
 That's it, you're all set! Start packing!
 
-You'll receive your printable ticket in a separate e-mail, please bring it
+You'll receive your printable entry pass in a separate e-mail, please bring it
 together with ID to the port when you arrive.
 
 You can view the receipt at https://memberships.theborderland.se/
@@ -110,9 +115,10 @@ def voucher_transfer(recipient, sender, expiration):
     '''
 Dearest Borderling,
 
-Someone with the email address {} has sent you an invitation to The Borderland 2019!
+Someone with the email address {} has sent you an invitation to purchase a
+membership to The Borderland 2019!
 
-Go here to purchase your membership: https://memberships.theborderland.se
+Go here to complete your purchase: https://memberships.theborderland.se
 
 Hurry up, it expires {}!
 
