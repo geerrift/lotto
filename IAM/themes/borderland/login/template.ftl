@@ -29,9 +29,32 @@
             <script src="${script}" type="text/javascript"></script>
         </#list>
     </#if>
+    
+    <!-- NEW STUFF -->
+    <link rel="stylesheet" type="text/css" href="style/login.css">
+    
+    <link rel="stylesheet" type="text/css" href="style/bootstrap.css">
+    <link rel="stylesheet" type="text/css" href="style/v1.css">
+    <script type="text/javascript" src="style/bootstrap.js"></script>
+    <script type="text/javascript" src="style/v1.js"></script>
+
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <!-- NEW STUFF END -->
+    
 </head>
 
 <body class="${properties.kcBodyClass!}">
+
+<!-- NEW STUFF -->
+<div id="loading" class="hidden"></div>
+<div class="outer_container">
+  <div class="container">
+    <div class="row">
+      <div class="col-6 col-md-4">
+        <a class="logo" href="#"></a>
+        <div>
+        
+        <!-- TEMPLATE STARTS HERE -->
   <div class="${properties.kcLoginClass!}">
     <div id="kc-header" class="${properties.kcHeaderClass!}">
       <div id="kc-header-wrapper" class="${properties.kcHeaderWrapperClass!}">${kcSanitize(msg("loginTitleHtml",(realm.displayNameHtml!'')))?no_esc}</div>
@@ -78,9 +101,21 @@
           </#if>
         </div>
       </div>
+    </div>
+    <!-- TEMPLATE END -->
+    
+          <!-- ART COLUMN -->
+     <div class="col-12 col-md-8 artwork art-fire">
+      </div>
+    <!-- ART COLUMN END -->
 
+     </div>
     </div>
   </div>
+<!-- NEW STUFF END -->
+    
+  </div>
+  
 </body>
 </html>
 </#macro>
