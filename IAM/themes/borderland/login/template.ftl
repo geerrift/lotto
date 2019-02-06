@@ -29,9 +29,30 @@
             <script src="${script}" type="text/javascript"></script>
         </#list>
     </#if>
+    
+    
+    <!-- NEW SCRIPT STUFF -->
+    <link rel="stylesheet" type="text/css" href="style/bootstrap.css">
+    <link rel="stylesheet" type="text/css" href="style/v1.css">
+    <script type="text/javascript" src="style/bootstrap.js"></script>
+    <script type="text/javascript" src="style/v1.js"></script>
+    <!-- NEW SCRIPT STUFF END -->
+    
 </head>
 
 <body class="${properties.kcBodyClass!}">
+
+<!-- CONTAINER AND LOAD BEGINS -->
+<div id="loading" class="hidden"></div>
+<div class="outer_container">
+  <div class="container">
+    <div class="row">
+      <div class="col-6 col-md-4">
+        <a class="logo" href="#"></a>
+        <div>
+
+            <!-- TEMPLATE CONTINUES HERE -->
+
   <div class="${properties.kcLoginClass!}">
     <div id="kc-header" class="${properties.kcHeaderClass!}">
       <div id="kc-header-wrapper" class="${properties.kcHeaderWrapperClass!}">${kcSanitize(msg("loginTitleHtml",(realm.displayNameHtml!'')))?no_esc}</div>
@@ -81,6 +102,23 @@
 
     </div>
   </div>
+  
+  <!-- TEMPLATE END  -->
+
+
+        </div>
+      </div>
+    </div>
+  <!-- BOOTSTRAP COLUMN LEFT END / RIGHT BEGIN -->
+  
+  <div class="col-12 col-md-8 artwork art-glitter">
+  </div>
+  <!-- BOOTSTRAP COLUMN RIGHT END -->
+    
+  </div>
+</div>
+<!-- CONTAINER ENDS -->
+  
 </body>
 </html>
 </#macro>
